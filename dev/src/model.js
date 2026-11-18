@@ -77,6 +77,9 @@ function horseGeos() {
   ].map(NI));
   const blaze = g(new THREE.PlaneGeometry(0.07, 0.5), hd(0.3).add(V(0.075 * Math.sin(-beta), 0.075 * Math.cos(beta) * 0 + 0.07, 0)), beta - Math.PI / 2, null, 0, Math.PI / 2);
   const bit = hd(0.5);
+  const ring = (t, r, sc) => { const tg = new THREE.TorusGeometry(r, 0.012, 6, 18); tg.rotateY(Math.PI / 2); tg.scale(1, sc, 1); tg.rotateZ(beta); const p = hd(t); tg.translate(p.x, p.y, p.z); return NI(tg); };
+  const bridle = mergeGeometries([ring(0.42, 0.105, 1.05), ring(0.06, 0.16, 1.1),
+    g(new THREE.TorusGeometry(0.125, 0.012, 6, 16, Math.PI), E.clone().add(V(0.0, 0.07, 0)), Math.PI / 2 - 0.2, V(1, 1, 1.05), 0, Math.PI / 2).toNonIndexed()]);
   // 脚：上・管・つなぎ（球節で曲がる）
   const upperF = mergeGeometries([g(new THREE.CylinderGeometry(0.07, 0.115, 0.48, 10), V(0, -0.24, 0)), g(new THREE.SphereGeometry(0.075, 8, 6), V(0, -0.48, 0), 0, V(1, 1.1, 0.9))].map(NI));
   const lowerF = mergeGeometries([g(new THREE.CylinderGeometry(0.04, 0.05, 0.38, 8), V(0, -0.19, 0)), g(new THREE.SphereGeometry(0.058, 8, 6), V(0, -0.39, 0))].map(NI));
@@ -85,40 +88,95 @@ function horseGeos() {
   const upperH = mergeGeometries([g(new THREE.CylinderGeometry(0.08, 0.16, 0.56, 10), V(0, -0.28, 0)), g(new THREE.SphereGeometry(0.08, 8, 6), V(-0.02, -0.56, 0), 0, V(1.3, 1, 0.8))].map(NI));
   const lowerH = mergeGeometries([g(new THREE.CylinderGeometry(0.042, 0.055, 0.44, 8), V(0, -0.22, 0)), g(new THREE.SphereGeometry(0.06, 8, 6), V(0, -0.45, 0))].map(NI));
   const sock = g(new THREE.CylinderGeometry(0.047, 0.052, 0.2, 8), V(0, -0.33, 0));
-  // しっぽ：何本かの房
-  const tailParts = [g(new THREE.CylinderGeometry(0.07, 0.05, 0.25, 8), V(0, -0.12, 0))];
-  for (let i = 0; i < 6; i++) { const a2 = (i / 6) * Math.PI * 2; tailParts.push(g(new THREE.ConeGeometry(0.045, 0.75, 6), V(Math.cos(a2) * 0.025, -0.55, Math.sin(a2) * 0.03), Math.PI + Math.cos(a2) * 0.08, null, Math.sin(a2) * 0.08)); }
-  const tail = mergeGeometries(tailParts.map(NI));
+  // しっぽ：付け根＋毛すじを貼った板を3枚交差させて、ふさふさに
+  const tailParts = [g(new THREE.CylinderGeometry(0.075, 0.055, 0.28, 8), V(0, -0.13, 0))];
+  for (let i = 0; i < 3; i++) {
+    const pl = new THREE.PlaneGeometry(0.26, 0.85, 1, 4);
+    const a = pl.attributes.position; for (let k = 0; k < a.count; k++) { const y = a.getY(k); a.setX(k, a.getX(k) * (0.75 + (0.425 - y) * 0.5)); }
+    { const uv = pl.attributes.uv; for (let k = 0; k < uv.count; k++) uv.setY(k, 1 - uv.getY(k)); }
+    pl.translate(0, -0.62, 0); pl.rotateY(i * Math.PI / 3);
+    tailParts.push(pl);
+  }  const tail = mergeGeometries(tailParts.map(NI));
   const saddle = mergeGeometries([
     g(new THREE.BoxGeometry(0.5, 0.06, 0.42), V(0.1, 1.69, 0)),
     g(new THREE.BoxGeometry(0.16, 0.08, 0.36), V(0.32, 1.72, 0)),
     g(new THREE.TorusGeometry(0.4, 0.025, 6, 20, Math.PI), V(0.1, 1.3, 0), 0, null, 0, Math.PI / 2), // 腹帯
   ].map(NI));
-  geoCache.h = { body, neck, ears, mane, eyes, blaze, upperF, lowerF, pastF, hoof, upperH, lowerH, sock, tail, saddle, bit, alpha };
+  geoCache.h = { body, neck, ears, mane, eyes, blaze, bridle, upperF, lowerF, pastF, hoof, upperH, lowerH, sock, tail, saddle, bit, alpha };
   return geoCache.h;
 }
 
+function capX(r, len, pos, rotZ = 0, scale) { // x方向のカプセル
+  const c = new THREE.CapsuleGeometry(r, len, 6, 14); c.rotateZ(-Math.PI / 2);
+  return g(c, pos, rotZ, scale);
+}
+function seg(r1, r2, a, b, n = 10) { // 点aから点bへの円柱
+  const d = new THREE.Vector3().subVectors(b, a), len = d.length();
+  const c = new THREE.CylinderGeometry(r2, r1, len, n); c.translate(0, len / 2, 0);
+  c.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(V(0, 1, 0), d.normalize())); c.translate(a.x, a.y, a.z);
+  return c;
+}
 function jockeyGeos() {
   if (geoCache.j) return geoCache.j;
-  const torso = g(new THREE.BoxGeometry(0.5, 0.24, 0.34), V(0.24, 0.43, 0), -0.12);
+  // 前かがみの胴（背中・肩・胸）
+  const torso = mergeGeometries([
+    capX(0.15, 0.3, V(0.24, 0.45, 0), -0.14, V(1, 1, 1.22)),
+    g(new THREE.SphereGeometry(0.1, 12, 8), V(0.42, 0.47, 0.15)),
+    g(new THREE.SphereGeometry(0.1, 12, 8), V(0.42, 0.47, -0.15)),
+    g(new THREE.SphereGeometry(0.16, 14, 10), V(0.04, 0.4, 0), 0, V(1, 0.9, 1.15)), // 腰
+  ].map(NI));
   const helmet = mergeGeometries([
-    g(new THREE.SphereGeometry(0.135, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.6), V(0.56, 0.6, 0)).toNonIndexed(),
-  ]);
-  const face = g(new THREE.SphereGeometry(0.105, 10, 8), V(0.6, 0.56, 0));
-  const pants = mergeGeometries([
-    cylDir(0.07, 0.06, 0.42, V(-0.02, 0.32, 0.17), -0.35).toNonIndexed(),
-    cylDir(0.07, 0.06, 0.42, V(-0.02, 0.32, -0.17), -0.35).toNonIndexed(),
-  ]);
-  const boots = mergeGeometries([
-    cylDir(0.055, 0.045, 0.42, V(0.37, 0.18, 0.2), -2.0).toNonIndexed(),
-    cylDir(0.055, 0.045, 0.42, V(0.37, 0.18, -0.2), -2.0).toNonIndexed(),
-  ]);
-  const arms = mergeGeometries([
-    cylDir(0.05, 0.045, 0.42, V(0.42, 0.48, 0.17), -0.85).toNonIndexed(),
-    cylDir(0.05, 0.045, 0.42, V(0.42, 0.48, -0.17), -0.85).toNonIndexed(),
-  ]);
-  geoCache.j = { torso, helmet, face, pants, boots, arms };
+    g(new THREE.SphereGeometry(0.128, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.58), V(0.57, 0.6, 0)),
+    g(new THREE.CylinderGeometry(0.12, 0.13, 0.02, 16, 1, false, -Math.PI * 0.45, Math.PI * 0.9), V(0.6, 0.6, 0), 0, V(1.25, 1, 1)), // ひさし
+  ].map(NI));
+  const face = mergeGeometries([
+    g(new THREE.SphereGeometry(0.1, 12, 10), V(0.6, 0.555, 0), 0, V(1, 1.05, 0.9)),
+    seg(0.05, 0.05, V(0.5, 0.5, 0), V(0.56, 0.54, 0), 8), // 首
+  ].map(NI));
+  const goggles = mergeGeometries([
+    g(new THREE.BoxGeometry(0.04, 0.05, 0.17), V(0.69, 0.57, 0)),
+    g(new THREE.TorusGeometry(0.105, 0.012, 6, 20), V(0.6, 0.575, 0), 0, V(1, 0.35, 1.02), Math.PI / 2),
+  ].map(NI));
+  const thighs = [], shins = [], cuffs = [];
+  for (const z of [0.17, -0.17]) {
+    const hip = V(0.02, 0.36, z * 0.8), knee = V(0.36, 0.26, z * 1.18), ank = V(0.2, -0.05, z * 1.24);
+    thighs.push(seg(0.08, 0.065, hip, knee, 10), g(new THREE.SphereGeometry(0.065, 8, 6), knee));
+    shins.push(seg(0.06, 0.05, knee, ank, 10), g(new THREE.BoxGeometry(0.15, 0.05, 0.07), V(0.25, -0.07, z * 1.24)));
+    cuffs.push(seg(0.066, 0.064, knee.clone().lerp(ank, 0.08), knee.clone().lerp(ank, 0.22), 10));
+  }
+  const pants = mergeGeometries(thighs.map(NI));
+  const boots = mergeGeometries(shins.map(NI));
+  const cuff = mergeGeometries(cuffs.map(NI));
+  const armsL = [], gl = [];
+  for (const z of [0.17, -0.17]) {
+    const sh = V(0.42, 0.47, z), el = V(0.6, 0.33, z * 1.15), hd = V(0.84, 0.3, z * 0.55);
+    armsL.push(seg(0.058, 0.05, sh, el, 10), g(new THREE.SphereGeometry(0.05, 8, 6), el), seg(0.05, 0.042, el, hd, 10));
+    gl.push(g(new THREE.SphereGeometry(0.048, 8, 6), hd, 0, V(1.2, 0.9, 1)));
+  }
+  const arms = mergeGeometries(armsL.map(NI));
+  const gloves = mergeGeometries(gl.map(NI));
+  geoCache.j = { torso, helmet, face, goggles, pants, boots, cuff, arms, gloves };
   return geoCache.j;
+}
+
+// 勝負服の柄（地色＋もう1色で、縦じま・輪・たすき・袖・星など）
+const silkCache = {};
+function silkMat(color, pat) {
+  const key = color + '_' + pat;
+  if (silkCache[key]) return silkCache[key];
+  const c = document.createElement('canvas'); c.width = 128; c.height = 128; const x = c.getContext('2d');
+  const base = new THREE.Color(color), lum = base.r * 0.3 + base.g * 0.59 + base.b * 0.11;
+  const sub = lum > 0.6 ? (pat % 2 ? '#1d3a8a' : '#c81e1e') : (pat % 3 ? '#ffffff' : '#f2c200');
+  x.fillStyle = '#' + base.getHexString(); x.fillRect(0, 0, 128, 128);
+  x.fillStyle = sub;
+  if (pat === 1) for (let i = 0; i < 128; i += 32) x.fillRect(i, 0, 14, 128);           // 縦じま
+  else if (pat === 2) for (let i = 0; i < 128; i += 32) x.fillRect(0, i, 128, 13);      // 輪
+  else if (pat === 3) { x.save(); x.translate(64, 64); x.rotate(0.7); x.fillRect(-90, -11, 180, 22); x.restore(); } // たすき
+  else if (pat === 4) for (let i = 0; i < 6; i++) for (let j = 0; j < 6; j++) { x.beginPath(); x.arc(i * 22 + (j % 2) * 11, j * 22, 5, 0, 7); x.fill(); } // 水玉
+  else if (pat === 5) for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) if ((i + j) % 2) x.fillRect(i * 32, j * 32, 32, 32); // 市松
+  else if (pat === 6) { x.fillRect(0, 0, 128, 20); x.fillRect(0, 108, 128, 20); } // 山形の代わりに上下の帯
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return (silkCache[key] = new THREE.MeshStandardMaterial({ map: t, roughness: 0.32, metalness: 0.0 }));
 }
 
 const matCache = {};
@@ -180,20 +238,25 @@ export function buildHorse(coat, silkColor, num, opts = {}) {
   if (opts.blaze ?? Math.random() < 0.35) neckP.add(new THREE.Mesh(G.blaze, new THREE.MeshStandardMaterial({ color: 0xf4f1ea, roughness: 0.6, side: THREE.DoubleSide })));
   // しっぽ
   const tailP = new THREE.Group(); tailP.position.set(-1.08, 1.45, 0); bodyG.add(tailP);
-  tailP.add(new THREE.Mesh(G.tail, maneMat));
+  tailP.add(new THREE.Mesh(G.tail, new THREE.MeshStandardMaterial({ color: coat.mane, map: MANE_MAP, alphaTest: 0.3, side: THREE.DoubleSide, roughness: 0.7 })));
   // 騎手
   const J = jockeyGeos();
   const jock = new THREE.Group(); jock.position.set(0.05, 1.68, 0); bodyG.add(jock);
-  const silk = mat(silkColor, { roughness: 0.35, metalness: 0.05 });
+  const silk = silkMat(silkColor, opts.pat ?? ((num || 0) * 5 + 3) % 7);
   const torso = new THREE.Mesh(J.torso, silk); jock.add(torso);
-  const helmet = new THREE.Mesh(J.helmet, opts.cap ? mat(new THREE.Color(opts.cap).getHex(), { roughness: 0.3 }) : silk); jock.add(helmet);
-  const face = new THREE.Mesh(J.face, mat(0xe2b48c)); jock.add(face);
-  const pants = new THREE.Mesh(J.pants, mat(0xf2f2f2)); jock.add(pants);
-  const boots = new THREE.Mesh(J.boots, mat(0x151515, { roughness: 0.3 })); jock.add(boots);
+  const helmet = new THREE.Mesh(J.helmet, opts.cap ? mat(new THREE.Color(opts.cap).getHex(), { roughness: 0.25 }) : silk); jock.add(helmet);
+  const face = new THREE.Mesh(J.face, mat(0xd9a982, { roughness: 0.7 })); jock.add(face);
+  const gog = new THREE.Mesh(J.goggles, mat(0x101418, { roughness: 0.1, metalness: 0.6 })); jock.add(gog);
+  const pants = new THREE.Mesh(J.pants, mat(0xf4f4f0, { roughness: 0.6 })); jock.add(pants);
+  const boots = new THREE.Mesh(J.boots, mat(0x111111, { roughness: 0.25 })); jock.add(boots);
+  jock.add(new THREE.Mesh(J.cuff, mat(0xb07a45, { roughness: 0.5 })));
   const arms = new THREE.Mesh(J.arms, silk); jock.add(arms);
-
+  const gloves = new THREE.Mesh(J.gloves, mat(0xf2f2f2, { roughness: 0.7 })); jock.add(gloves);
+  // 頭絡（白い鼻革・額革）と手綱の付け根
+  const bri = mat(0xf0efe8, { roughness: 0.5 });
+  neckP.add(new THREE.Mesh(G.bridle, bri));
   root.traverse(o => { if (o.isMesh) { o.castShadow = !!opts.shadow; } });
-  const H = { root, bodyG, neckP, mane, legs, tailP, jock, torso, helmet, face, pants, boots, arms, silk, bit: G.bit.clone(), phase: 0, coatMat, coatBase: coatMat.color.clone() };
+  const H = { root, bodyG, neckP, mane, legs, tailP, jock, torso, helmet, face, pants, boots, arms, silk, gog, gloves, bit: G.bit.clone(), phase: 0, coatMat, coatBase: coatMat.color.clone() };
   return H;
 }
 
@@ -218,7 +281,7 @@ export function animateHorse(H, stride, v, t) {
   H.bodyG.position.y = 0.06 * Math.sin(ph * 1) * amp;
   H.bodyG.rotation.z = 0.035 * Math.sin(ph + 1.2) * amp;
   H.neckP.rotation.z = (0.1 * Math.sin(ph + 2.4) - 0.12) * amp;
-  H.tailP.rotation.z = -1.1 - 0.4 * amp + 0.08 * Math.sin(ph * 2);
+  H.tailP.rotation.z = -0.5 - 0.75 * amp + 0.1 * Math.sin(ph * 2);
   H.tailP.rotation.x = 0.08 * Math.sin(t * 9);
   // 騎手は上下動を吸収
   H.jock.position.y = 1.68 - H.bodyG.position.y * 0.7;

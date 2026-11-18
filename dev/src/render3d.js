@@ -1,5 +1,6 @@
 // ===== 3Dの競馬場とレース描画（騎手の一人称視点） =====
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { TRACK, trackPos, elev } from './sim.js';
 import { COAT } from './data.js';
 import { buildHorse, animateHorse } from './model.js';
@@ -131,7 +132,16 @@ export class RaceView {
     const sunDir = new THREE.Vector3(-0.45, 0.62, 0.35).normalize();
     this.sunDir = sunDir;
     S.add(this.sky = skyMesh(sunDir, { cloud: cloudy, night: night ? 1 : 0, dark: wx === '雨' ? 0.25 : 0 }));
-    const hemiI = night ? 0.22 : 0.75 - cloudy * 0.15;
+    // 空を写した環境光（毛づや・勝負服・柵がそれらしく光る）
+    try {
+      const envS = new THREE.Scene();
+      envS.add(skyMesh(sunDir, { cloud: cloudy, night: night ? 1 : 0, dark: wx === '雨' ? 0.25 : 0 }));
+      const gnd = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.MeshBasicMaterial({ color: night ? 0x0c140c : 0x35552a })); gnd.rotation.x = -Math.PI / 2; gnd.position.y = -3; envS.add(gnd);
+      const pm = new THREE.PMREMGenerator(this.renderer);
+      this.envRT = pm.fromScene(envS, 0.02, 0.1, 500); pm.dispose();
+      S.environment = this.envRT.texture; S.environmentIntensity = night ? 0.35 : 0.55;
+    } catch (e) { console.warn(e); }
+    const hemiI = night ? 0.16 : 0.5 - cloudy * 0.1;
     S.add(new THREE.HemisphereLight(night ? 0x8090c0 : 0xd6e8ff, 0x52602f, hemiI));
     const sun = new THREE.DirectionalLight(night ? 0xdfe6ff : 0xfff0d8, night ? 0.9 : 2.6 * (1 - cloudy * 0.6));
     sun.castShadow = true;
@@ -266,8 +276,12 @@ export class RaceView {
     }
     // 木
     const trunkG = new THREE.CylinderGeometry(0.3, 0.45, 4, 6); trunkG.translate(0, 2, 0);
-    const leafG = new THREE.ConeGeometry(3.2, 9, 8); leafG.translate(0, 8, 0);
-    const leafG2 = new THREE.SphereGeometry(3.6, 8, 6); leafG2.translate(0, 6.5, 0);
+    const leafG = mergeGeometries([[3.4, 4.2, 5.5], [2.7, 3.6, 8], [1.9, 3, 10.3]].map(([r, h, y]) => { const c = new THREE.ConeGeometry(r, h, 10); c.translate(0, y, 0); return c.toNonIndexed(); }));
+    const leafG2 = (() => { // いくつかの球を合わせたふんわりした木
+      const parts = [[0, 6.6, 0, 3.0], [1.8, 5.6, 0.6, 2.2], [-1.6, 5.8, -0.5, 2.3], [0.4, 8.2, -0.6, 2.2], [-0.3, 5.4, 1.7, 2.0], [0.5, 5.6, -1.8, 2.0]];
+      const gs = parts.map(([x, y, z, r]) => { const q = new THREE.IcosahedronGeometry(r, 2); const a = q.attributes.position; for (let i = 0; i < a.count; i++) { const k = 1 + (Math.sin(a.getX(i) * 3.1 + a.getY(i) * 2.3) * Math.cos(a.getZ(i) * 2.7)) * 0.1; a.setXYZ(i, a.getX(i) * k + x, a.getY(i) * k + y, a.getZ(i) * k + z); } q.computeVertexNormals(); return q; });
+      return mergeGeometries(gs);
+    })();
     const trees = [];
     const desert = TRACK.abroad === 'ドバイ' || TRACK.abroad === 'サウジアラビア';
     const nTree = desert ? 120 : kind === 'paris' ? 800 : 520;
@@ -286,8 +300,8 @@ export class RaceView {
     }
     const trunkM = new THREE.InstancedMesh(trunkG, new THREE.MeshStandardMaterial({ color: 0x4a3524 }), trees.length);
     const coneT = trees.filter(t => t[3] === 0), roundT = trees.filter(t => t[3] === 1), palmT = trees.filter(t => t[3] === 2);
-    const coneM = new THREE.InstancedMesh(leafG, new THREE.MeshStandardMaterial({ color: 0x24502a, roughness: 1 }), Math.max(1, coneT.length));
-    const roundM = new THREE.InstancedMesh(leafG2, new THREE.MeshStandardMaterial({ color: wx === '雪' ? 0xdfe8e0 : 0x3d6e2e, roughness: 1 }), Math.max(1, roundT.length));
+    const coneM = new THREE.InstancedMesh(leafG, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95 }), Math.max(1, coneT.length));
+    const roundM = new THREE.InstancedMesh(leafG2, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95 }), Math.max(1, roundT.length));
     const palmG = new THREE.ConeGeometry(4, 2.5, 7); palmG.translate(0, 9, 0);
     const palmM = new THREE.InstancedMesh(palmG, new THREE.MeshStandardMaterial({ color: 0x4f7a2a, roughness: 1 }), Math.max(1, palmT.length));
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sv = new THREE.Vector3();
@@ -295,6 +309,9 @@ export class RaceView {
     coneT.forEach((t, i) => { sv.setScalar(t[2]); m.compose(new THREE.Vector3(t[0], 0, t[1]), q, sv); coneM.setMatrixAt(i, m); });
     roundT.forEach((t, i) => { sv.set(t[2], t[2] * (0.8 + Math.random() * 0.4), t[2]); m.compose(new THREE.Vector3(t[0], 0, t[1]), q, sv); roundM.setMatrixAt(i, m); });
     palmT.forEach((t, i) => { sv.setScalar(t[2]); m.compose(new THREE.Vector3(t[0], 0, t[1]), q, sv); palmM.setMatrixAt(i, m); });
+    { const cc = new THREE.Color(); const snow = wx === '雪';
+      coneT.forEach((t, i) => { cc.setHSL(0.3 + Math.random() * 0.06, 0.45, snow ? 0.75 : 0.16 + Math.random() * 0.08); coneM.setColorAt(i, cc); });
+      roundT.forEach((t, i) => { cc.setHSL(0.2 + Math.random() * 0.12, 0.42 + Math.random() * 0.15, snow ? 0.8 : 0.22 + Math.random() * 0.1); roundM.setColorAt(i, cc); }); }
     if (!coneT.length) coneM.count = 0; if (!roundT.length) roundM.count = 0; if (!palmT.length) palmM.count = 0;
     S.add(trunkM, coneM, roundM, palmM);
     // 遠くの山・街
@@ -408,7 +425,7 @@ export class RaceView {
     this.view = v;
     const P = this.player; if (!P) return;
     const fp = v === 'fp';
-    for (const o of [P.torso, P.helmet, P.face, P.pants, P.boots, P.arms]) o.visible = !fp;
+    P.jock.visible = !fp;
     for (const a of this.arms) { a.arm.visible = fp; a.hand.visible = fp; a.rein.visible = true; }
     this.whipStick.visible = fp;
     if (fp) { if (this.camera.parent !== this.rig) this.rig.add(this.camera); this.camera.position.set(0, 0, 0); }
@@ -423,7 +440,8 @@ export class RaceView {
     geo.setAttribute('color', new THREE.BufferAttribute(this.pCol, 3));
     const isTurf = this.race.surf !== 'ダ';
     this.isTurf = isTurf;
-    this.pts = new THREE.Points(geo, new THREE.PointsMaterial({ vertexColors: true, size: isTurf ? 0.09 : 0.08, sizeAttenuation: true }));
+    const dot = document.createElement('canvas'); dot.width = dot.height = 32; { const x = dot.getContext('2d'); x.fillStyle = '#fff'; x.beginPath(); x.arc(16, 16, 12, 0, 7); x.fill(); }
+    this.pts = new THREE.Points(geo, new THREE.PointsMaterial({ vertexColors: true, size: isTurf ? 0.09 : 0.08, sizeAttenuation: true, map: new THREE.CanvasTexture(dot), alphaTest: 0.5 }));
     this.pts.frustumCulled = false;
     this.scene.add(this.pts); this.pN = N; this.pI = 0;
     // 砂ぼこり（ダートは大きく、乾いた芝は少し）
@@ -609,6 +627,7 @@ export class RaceView {
     this.renderer.domElement.style.transform = ''; setMirror(false);
     window.removeEventListener('resize', this._onResize);
     this.scene.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) { const ms = Array.isArray(o.material) ? o.material : [o.material]; ms.forEach(m => { if (m.map) m.map.dispose(); if (m.bumpMap) m.bumpMap.dispose(); m.dispose(); }); } });
+    if (this.envRT) this.envRT.dispose();
     this.renderer.dispose();
   }
 }

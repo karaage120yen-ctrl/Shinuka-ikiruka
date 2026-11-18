@@ -1,7 +1,7 @@
 import asyncio, sys
 from playwright.async_api import async_playwright
 OUT='/home/claude/keiba/test/shots'
-CASES=[('fp','東京','晴','良','芝',12000),('back','東京','晴','良','芝',12000)]
+CASES=[('back','東京','晴','良','芝',14000),('tv','京都','晴','良','芝',15000),('fp','東京','晴','良','芝',22000)]
 async def main():
     async with async_playwright() as p:
         b = await p.chromium.launch(executable_path='/usr/bin/google-chrome', args=['--use-angle=swiftshader','--enable-unsafe-swiftshader'])
