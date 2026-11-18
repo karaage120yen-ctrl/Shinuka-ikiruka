@@ -36,9 +36,10 @@ export function makeRacer(spec) {
   const h = spec.h, j = spec.j;
   const apt = APT_FACTOR[spec.apt] ?? 1;
   const cf = COND_SPEED[spec.cond ?? 2];
-  const top = (16.55 + 0.022 * h.spd) * apt * cf;
-  const cap = 1100 + 24 * h.sta;
-  return {
+  const hs = spec.hsk || [], js = spec.jsk || [];
+  const top = (16.55 + 0.022 * h.spd) * apt * cf * (spec.tired ? 0.985 : 1);
+  const cap = (1100 + 24 * h.sta) * (hs.includes('stayer') ? 1.06 : 1);
+  const R = {
     ...spec,
     top, cap, energy: cap,
     accel: 0.42 + 0.008 * h.pow,
@@ -55,13 +56,23 @@ export function makeRacer(spec) {
     gateDelay: rnd(0.02, 0.38) * (1.25 - (h.wis + j.jud) / 260),
     blocked: false, stride: Math.random() * 10, aiTimer: Math.random() * 0.3, aiWhipT: 0, bump: 0,
   };
+  // 特殊能力
+  if (hs.includes('nige')) R.cruise += 0.006;
+  if (hs.includes('smart')) R.eff *= 0.97;
+  if (js.includes('eco')) R.eff *= 0.96;
+  if (js.includes('whipm')) R.whipDv *= 1.15;
+  if (js.includes('meishu')) R.latSpeed *= 1.25;
+  if (js.includes('start')) R.gateDelay *= 0.5;
+  R.sue = hs.includes('sue') ? 1.01 : 1;
+  R.konjo = hs.includes('konjo') ? 2 : 1;
+  return R;
 }
 
 // 対戦相手を作る（いい勝負になるように、プレイヤーの強さに寄せる）
 export function makeOpponents(race, playerSpec, n, opts = {}) {
   const ph = playerSpec.h;
   const pEff = (ph.spd * 1.3 + ph.pow * 0.9 + ph.gut * 0.8 + ph.wis * 0.6 + Math.min(ph.sta, 20 + race.dist / 40) * 1.0) / 4.6;
-  const base = lerp(race.lv ?? 40, pEff, opts.blend ?? 0.6);
+  const base = lerp(race.lv ?? 40, pEff, opts.blend ?? 0.4);
   const staNeed = (race.dist * 1.13 - 1100) / 24;
   const list = [];
   const styles = ['逃げ', '先行', '先行', '先行', '差し', '差し', '差し', '追込', '追込'];
@@ -144,11 +155,12 @@ export function stepRace(race, dt, input) {
     if (whipping && r.whipT > 0) target += (r.isPlayer && !r.ai ? 1.15 : 1) * r.whipDv * (r.energy > 0 ? 1 : 0.3) + (rem < 400 ? r.h.gut * 0.002 : 0);
     // 競り合い（根性）
     if (rem < 420 && !r.finished) {
-      for (const o of rs) if (o !== r && Math.abs(o.p - r.p) < 1.6 && Math.abs(o.d - r.d) < 2.6) { target += 0.12 * r.h.gut / 100; break; }
+      for (const o of rs) if (o !== r && Math.abs(o.p - r.p) < 1.6 && Math.abs(o.d - r.d) < 2.6) { target += 0.12 * r.konjo * r.h.gut / 100; break; }
     }
     // スタミナ切れ
     if (r.energy <= 0) target = Math.min(target, r.top * (0.85 + 0.0007 * r.h.gut) + (whipping ? 0.15 : 0));
     else if (ratio < 0.12) target *= 0.95 + 0.0005 * r.h.gut;
+    if (rem < r.spurtDist) target *= r.sue;
     target = Math.min(target, r.top * 1.07);
     // ---- 前が詰まる ----
     r.blocked = false;
@@ -257,4 +269,20 @@ export function marginText(dt, v) {
   if (len < 4.5) return '4';
   if (len < 6) return '5';
   return '大差';
+}
+
+// 3Dを使わずに結果だけ出す（オート用）
+export function simulateRace(cfg) {
+  const opps = cfg.opponents ? [...cfg.opponents] : [];
+  const pSpec = { ...cfg.player, isPlayer: true, ai: true };
+  const n = cfg.fieldSize || 12;
+  if (opps.length < n - 1) opps.push(...makeOpponents(cfg.race, pSpec, n - 1 - opps.length));
+  const race = createRace({ dist: cfg.race.dist, surf: cfg.race.surf, specs: [pSpec, ...opps] });
+  race.countdown = 0; race.started = true;
+  let t = 0;
+  while (race.finishedCount < race.racers.length && t < 400) { stepRace(race, 1 / 20, null); t += 1 / 20; race.events.length = 0; }
+  const all = race.racers.map(r => ({ r, time: r.finished ? r.finishTime : race.t + (race.dist - r.p) / Math.max(10, r.v) })).sort((a, b) => a.time - b.time);
+  const list = all.map((x, i) => ({ pos: i + 1, name: x.r.name, jname: x.r.jname, num: x.r.num, time: x.time, isPlayer: !!x.r.isPlayer, margin: i === 0 ? '' : marginText(x.time - all[i - 1].time, 16.5), silk: x.r.silk }));
+  const me = list.find(x => x.isPlayer);
+  return { pos: me.pos, field: list.length, time: me.time, whips: race.player.whips, list, jname: cfg.player.jname, auto: true };
 }

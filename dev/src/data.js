@@ -2,7 +2,7 @@
 export const H_KEYS = ['spd', 'sta', 'pow', 'gut', 'wis'];
 export const H_NAMES = { spd: 'スピード', sta: 'スタミナ', pow: 'パワー', gut: '根性', wis: '賢さ' };
 export const J_KEYS = ['tec', 'whip', 'bal', 'fit', 'jud'];
-export const J_NAMES = { tec: '技術', whip: 'ムチ', bal: 'バランス', fit: '体力', jud: '判断' };
+export const J_NAMES = { tec: '技術', whip: 'ムチ', bal: 'バランス', fit: '持久力', jud: '判断' };
 
 export const COND_NAMES = ['絶不調', '不調', '普通', '好調', '絶好調'];
 export const COND_COLORS = ['#7b5cff', '#5b9bff', '#cfcfcf', '#ffb347', '#ff5a5a'];

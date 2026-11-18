@@ -101,4 +101,4 @@ export function jockeyRaceExp(j, pos, g) {
   for (const k of ['tec', 'jud', 'whip']) gainOne(j, k, e, 1);
 }
 
-export const NPC_JOCKEY = { name: '見習い騎手', s: { tec: 30, whip: 30, bal: 30, fit: 30, jud: 30 }, silk: 6, npc: true };
+export const NPC_JOCKEY = { name: '厩舎の主戦騎手', s: { tec: 50, whip: 50, bal: 50, fit: 50, jud: 50 }, silk: 6, npc: true, skills: [] };

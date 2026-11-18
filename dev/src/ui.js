@@ -2,9 +2,9 @@
 import { H_KEYS, H_NAMES, J_KEYS, J_NAMES, COND_NAMES, COND_COLORS, COAT, SILKS, STYLES, GRADED,
   rankOf, rankColor, fmtMoney, fmtTime, randomHorseName, randomJockeyName, pick } from './data.js';
 import { S, save, newId, resetAll, findJockey } from './store.js';
-import { createHorse, cal, calText, stageOf, STAGE_NAMES, menuFor, FEEDS, doAction, doTreat, racesFor, afterRace,
-  horseScore, horseRankLabel, bestDistanceText, injuryChance, RETIRE_T } from './horse.js';
-import { createJockey, jCalText, J_MENU, mockAvailable, doJAction, doJTreat, afterMock, jockeyRaceExp, NPC_JOCKEY, J_TURNS } from './jockey.js';
+import { NPC_JOCKEY } from './jockey.js';
+import { openCareer } from './careerui.js';
+import { stageOf } from './career.js';
 import { startRace } from './racescreen.js';
 import { pull, COST_1, COST_10, GACHA_POOL, RATES } from './gacha.js';
 import { setSound, initAudio } from './audio.js';
@@ -56,281 +56,18 @@ export function home() {
     <div class="logo"><div class="logo-sub">競馬育成ゲーム</div><div class="logo-main">死ぬか<br>生きるかの<br>戦い</div></div>
     <div class="carrot home-carrot">🥕 金のにんじん ${S.carrots}</div>
     <div class="menu">
-      <button class="mbtn big" data-act="horse">🐎 馬を育てる${ah ? `<small>続き：${esc(ah.name)}（${calText(ah.t)}）</small>` : '<small>生まれてから引退まで</small>'}</button>
-      <button class="mbtn" data-act="jockey">🏇 騎手を育てる${aj ? `<small>続き：${esc(aj.name)}</small>` : '<small>競馬学校からデビューまで</small>'}</button>
+      <button class="mbtn big" data-act="horse">🐎 馬を育てる${ah && ah.p ? `<small>続き：${esc(ah.p.name)}（${ah.p.age}歳${ah.p.month}月）</small>` : '<small>生まれてから引退まで</small>'}</button>
+      <button class="mbtn" data-act="jockey">🏇 騎手を育てる${aj && aj.p ? `<small>続き：${esc(aj.p.name)}（${aj.p.age}歳）</small>` : '<small>競馬学校から引退まで</small>'}</button>
       <button class="mbtn" data-act="list">📖 一覧<small>育てた馬 ${S.horses.length}頭・騎手 ${S.jockeys.length}人</small></button>
       <button class="mbtn" data-act="gacha">🎰 ガチャ<small>キャラは準備中</small></button>
       <button class="mbtn" data-act="vs">⚔️ 対戦・レース<small>育てた馬で勝負</small></button>
       <button class="mbtn small" data-act="settings">⚙️ 設定</button>
     </div>
   </div>`);
-  bind({ horse: () => S.activeHorse ? horseTrain() : horseNew(), jockey: () => S.activeJockey ? jockeyTrain() : jockeyNew(),
+  bind({ horse: () => openCareer('horse', home), jockey: () => openCareer('jockey', home),
     list: () => listScreen('h'), gacha: gachaScreen, vs: vsScreen, settings: settingsScreen });
 }
 GO.home = home;
-
-// ===== 馬の誕生 =====
-function horseNew() {
-  let coat = Math.floor(Math.random() * COAT.length);
-  const draw = () => {
-    render(`${header('馬を育てる')}
-    <div class="page">
-      <div class="card center"><div class="foal" style="--c:${hex(COAT[coat].body)}"><span>🐴</span></div>
-        <p>牧場で新しい命が生まれようとしています。<br>名前と毛色を決めてください。</p></div>
-      <div class="card">
-        <label>馬の名前（カタカナ9文字まで）</label>
-        <div class="row"><input id="hname" maxlength="9" value="${esc(randomHorseName())}"><button class="btn" data-act="rand">🎲</button></div>
-        <label>毛色</label>
-        <div class="chips">${COAT.map((c, i) => `<button class="chip ${i === coat ? 'on' : ''}" data-act="coat" data-v="${i}"><i style="background:${hex(c.body)}"></i>${c.name}</button>`).join('')}</div>
-      </div>
-      <button class="btn primary wide" data-act="born">誕生させる</button>
-    </div>`);
-    bind({ go, rand: () => { document.getElementById('hname').value = randomHorseName(); },
-      coat: (v) => { const n = document.getElementById('hname').value; coat = +v; draw(); document.getElementById('hname').value = n; },
-      born: () => {
-        const name = document.getElementById('hname').value.trim() || randomHorseName();
-        const h = createHorse(name, { coat });
-        h.id = newId();
-        h.log.unshift(`父${h.sire}・母${h.dam}の間に、${COAT[coat].name}の仔馬「${h.name}」が生まれた！`);
-        S.activeHorse = h; save();
-        modal(`<h2>誕生！</h2><div class="foal big" style="--c:${hex(COAT[coat].body)}"><span>🐴</span></div>
-          <p><b>${esc(h.name)}</b><br>父 ${h.sire}　母 ${h.dam}</p>
-          <p class="muted">芝 ${h.apt.turf}／ダート ${h.apt.dirt}　脚質の傾向：${h.style}</p>
-          <button class="btn primary wide" data-close>育成スタート</button>`, { onClose: horseTrain });
-      } });
-  };
-  draw();
-}
-
-// ===== 馬の育成 =====
-function jockeyOf(h) { return findJockey(h.jockeyId) || NPC_JOCKEY; }
-
-function riskLabel(p) {
-  if (p <= 0.0005) return '<span class="risk r0">安全</span>';
-  if (p < 0.015) return '<span class="risk r1">低</span>';
-  if (p < 0.035) return '<span class="risk r2">中</span>';
-  return '<span class="risk r3">高</span>';
-}
-
-function horseTrain() {
-  const h = S.activeHorse;
-  if (!h) return home();
-  const c = cal(h.t);
-  const st = stageOf(h);
-  const j = jockeyOf(h);
-  const races = racesFor(h);
-  const menu = menuFor(h);
-  const fatCol = h.fatigue < 40 ? '#3ddc84' : h.fatigue < 70 ? '#ffc93d' : '#ff4d4d';
-  const remain = RETIRE_T - h.t;
-  render(`${header(esc(h.name))}
-  <div class="page">
-    <div class="card hcard">
-      <div class="hc-top"><div class="dot" style="background:${hex(COAT[h.coat].body)}"></div>
-        <div><b>${c.age}歳 ${c.month}月</b><small>${STAGE_NAMES[st]}</small></div>
-        <div class="money">💴 ${fmtMoney(h.money)}</div></div>
-      <div class="hc-mid">
-        <span class="cond" style="background:${COND_COLORS[h.cond]}">${COND_NAMES[h.cond]}</span>
-        <div class="fat"><small>疲労</small><div class="bar"><i style="width:${h.fatigue}%;background:${fatCol}"></i></div></div>
-      </div>
-      ${h.injury ? `<div class="injury">🩹 ${esc(h.injury.name)}（治るまであと${h.injury.months}か月）</div>` : ''}
-      ${h.fatigue >= 70 && !h.injury ? `<div class="warnbox">疲れがたまっています。このまま調教するとケガしやすい！</div>` : ''}
-    </div>
-    <div class="card">
-      ${H_KEYS.map(k => statRow(H_NAMES[k], h.s[k])).join('')}
-      <div class="apt"><span>芝 <b>${h.apt.turf}</b></span><span>ダート <b>${h.apt.dirt}</b></span><span>${bestDistanceText(h)}向き</span><span>${h.style}</span></div>
-      <div class="apt"><span>戦績 ${h.record.join('-')}</span><span>獲得賞金 ${fmtMoney(h.earnings)}</span>${h.g1Wins ? `<span>G1 ${h.g1Wins}勝</span>` : ''}</div>
-    </div>
-    ${st === 2 ? `<div class="card jrow" data-act="pickj"><span>🏇 騎手</span><b>${esc(j.name)}</b><small>${j.npc ? '騎手を育てると乗せかえられます' : 'タップで変更'}</small></div>` : ''}
-    ${races.length ? `<button class="btn race wide" data-act="races">🏁 今月のレースを見る（${races.filter(r => !r.locked).length}レース）</button>` : (st === 2 && c.age === 2 && c.month < 6 ? '<div class="muted center">レースは2歳6月から出られます</div>' : '')}
-    <div class="sec">トレーニング</div>
-    ${h.injury ? `<button class="btn wide" data-act="treat">🩹 治療に専念する</button>` : `
-    <div class="grid">${menu.map(m => {
-      const gtxt = m.g ? Object.keys(m.g).map(k => H_NAMES[k]).join('・') : (m.rest ? `疲労 -${m.rest}` : '');
-      const risk = m.g ? riskLabel(injuryChance(h, m.inj)) : '';
-      return `<button class="tbtn ${m.g ? '' : 'rest'}" data-act="act" data-v="${m.id}"><b>${m.name}</b><small>${gtxt}</small>${m.g ? `<span class="tmeta">疲労+${m.f} ケガ${risk}</span>` : `<span class="tmeta">${m.desc}</span>`}</button>`;
-    }).join('')}</div>`}
-    <div class="sec">今月のエサ</div>
-    <div class="chips">${FEEDS.map(f => `<button class="chip ${h.feed === f.id ? 'on' : ''}" data-act="feed" data-v="${f.id}">${f.name}<small>${f.cost ? f.cost + '万円' : '無料'}</small></button>`).join('')}</div>
-    <div class="muted small">${FEEDS.find(f => f.id === h.feed).desc}</div>
-    <div class="sec">できごと</div>
-    <div class="log">${h.log.slice(0, 8).map(l => `<div>${esc(l)}</div>`).join('')}</div>
-    <div class="foot"><span class="muted">引退まで最大 ${Math.max(0, remain)}か月</span><button class="btn ghost" data-act="retire">引退させる</button></div>
-  </div>`);
-  bind({ go,
-    act: (id) => { const out = doAction(h, id, j.npc ? null : j); afterTurn(h, out); },
-    treat: () => { const out = doTreat(h); afterTurn(h, out); },
-    feed: (v) => { h.feed = v; save(); horseTrain(); },
-    races: () => raceSelect(h),
-    pickj: () => pickJockey(h),
-    retire: () => { if (confirm(`${h.name}を引退させますか？`)) { h.retireReason = '引退を決めた'; retireHorse(h); } },
-  });
-}
-
-function gainsHtml(gains, names) {
-  const e = Object.entries(gains).filter(([, v]) => v > 0);
-  if (!e.length) return '';
-  return `<div class="gains">${e.map(([k, v]) => `<span>${names[k]} <b>+${v}</b></span>`).join('')}</div>`;
-}
-
-function afterTurn(h, out) {
-  for (const m of out.msgs) h.log.unshift(m);
-  if (Object.keys(out.gains).length) h.log.unshift(`${out.title}：` + Object.entries(out.gains).filter(([, v]) => v > 0).map(([k, v]) => `${H_NAMES[k]}+${v}`).join(' '));
-  if (out.carrots) { S.carrots += out.carrots; }
-  if (out.injury) h.log.unshift(`ケガ：${out.injury.name}（${out.injury.months}か月）`);
-  h.log = h.log.slice(0, 40);
-  save();
-  let html = `<h2>${esc(out.title)}</h2>${gainsHtml(out.gains, H_NAMES)}${out.carrots ? `<p class="center">🥕 金のにんじん +${out.carrots}</p>` : ''}${out.msgs.map(m => `<p>${esc(m)}</p>`).join('')}`;
-  if (out.injury) {
-    const sev = out.injury.sev;
-    html += `<div class="injury big">⚠️ ${sev === 3 ? '重い故障' : sev === 2 ? 'ケガ' : '軽いケガ'}：${esc(out.injury.name)}<br><small>${out.injury.months}か月の休養が必要</small></div>`;
-  }
-  const next = () => {
-    if (out.forceRetire) { retireHorse(h); return; }
-    if (out.injury && out.injury.sev === 3) {
-      const m = modal(`<h2>死ぬか生きるか</h2><p>${esc(h.name)}は「${esc(out.injury.name)}」と診断された。<br>競走馬として走り続けるには長い休養が必要だ。</p>
-        <button class="btn primary wide" data-a="cont">長期休養して復帰をめざす</button><button class="btn wide" data-a="ret">引退させる</button>`, { cls: 'nobg' });
-      m.el.querySelector('[data-a=cont]').onclick = () => { m.close(); h.log.unshift('復帰をめざして長期休養に入った'); save(); horseTrain(); };
-      m.el.querySelector('[data-a=ret]').onclick = () => { m.close(); h.retireReason = `${out.injury.name}で引退`; retireHorse(h); };
-      return;
-    }
-    horseTrain();
-  };
-  modal(html + `<button class="btn primary wide" data-close>OK</button>`, { onClose: next });
-}
-
-function pickJockey(h) {
-  const list = [NPC_JOCKEY, ...S.jockeys];
-  const m = modal(`<h2>騎手を選ぶ</h2><div class="plist">${list.map((j, i) => `<button class="pitem ${((h.jockeyId ?? null) === (j.id ?? null)) ? 'on' : ''}" data-i="${i}">
-    <b>${esc(j.name)}</b><small>${J_KEYS.map(k => J_NAMES[k] + rankOf(j.s[k])).join(' ')}</small></button>`).join('')}</div>
-    ${S.jockeys.length ? '' : '<p class="muted">「騎手を育てる」でデビューさせた騎手が、ここに出てきます。</p>'}<button class="btn wide" data-close>閉じる</button>`);
-  m.el.querySelectorAll('[data-i]').forEach(b => b.onclick = () => { const j = list[+b.dataset.i]; h.jockeyId = j.id ?? null; save(); m.close(); horseTrain(); });
-}
-
-function raceSelect(h) {
-  const races = racesFor(h);
-  const m = modal(`<h2>${calText(h.t)} のレース</h2><div class="rlist">${races.map((r, i) => `
-    <button class="ritem ${r.locked ? 'locked' : ''}" data-i="${i}">
-      <div>${r.g ? `<span class="grade g-${r.g}">${r.g}</span>` : `<span class="grade gc">${r.name.split('（')[0]}</span>`}<b>${esc(r.g ? r.name : r.name)}</b></div>
-      <small>${r.place} ${r.surf === 'ダ' ? 'ダート' : '芝'}${r.dist}m　1着 ${fmtMoney(r.prize)}</small>
-      ${r.locked ? '<small class="lock">🔒 勝ち星が足りない</small>' : ''}
-    </button>`).join('')}</div><button class="btn wide" data-close>やめる</button>`);
-  m.el.querySelectorAll('[data-i]').forEach(b => b.onclick = () => { const r = races[+b.dataset.i]; if (r.locked) { toast('もっと勝ってから挑戦しよう'); return; } m.close(); preRace(h, r); });
-}
-
-function preRace(h, race) {
-  const j = jockeyOf(h);
-  let style = h.style;
-  const apt = race.surf === '芝' ? h.apt.turf : h.apt.dirt;
-  const draw = () => {
-    const m = modal(`<h2>${race.g ? `<span class="grade g-${race.g}">${race.g}</span>` : ''}${esc(race.name)}</h2>
-      <p class="center">${race.place} ${race.surf === 'ダ' ? 'ダート' : '芝'}${race.dist}m</p>
-      <div class="apt"><span>適性 ${apt}</span><span>体調 ${COND_NAMES[h.cond]}</span><span>疲労 ${Math.round(h.fatigue)}</span><span>騎手 ${esc(j.name)}</span></div>
-      <label>作戦</label><div class="chips">${STYLES.map(s => `<button class="chip ${s === style ? 'on' : ''}" data-s="${s}">${s}</button>`).join('')}</div>
-      <div class="howto"><b>操作</b><br>◀ ▶：馬を左右に動かす（内ラチ沿いは近道）<br>ムチ：たたいている間スピードUP。でも体力が減りやすい<br>体力ゲージが0になると一気に失速！</div>
-      <button class="btn race wide" data-go>出走！</button><button class="btn wide" data-close>やめる</button>`, { cls: 'nobg' });
-    m.el.querySelectorAll('[data-s]').forEach(b => b.onclick = () => { style = b.dataset.s; m.close(); draw(); });
-    m.el.querySelector('[data-go]').onclick = () => {
-      m.close();
-      const field = race.g === 'G1' ? 14 : race.g ? 12 : 10;
-      startRace({
-        race, fieldSize: field,
-        player: { name: h.name, jname: j.name, h: { ...h.s }, j: { ...j.s }, apt, cond: h.cond, style, coat: h.coat, silk: j.silk ?? 6 },
-        onDone: (res) => {
-          if (!res) { horseTrain(); return; }
-          const out = afterRace(h, race, res, j.npc ? null : j);
-          if (!j.npc) jockeyRaceExp(j, res.pos, race.g);
-          out.title = `${race.name}　${res.pos}着`;
-          afterTurn(h, out);
-        },
-      });
-    };
-  };
-  draw();
-}
-
-function retireHorse(h) {
-  h.retired = true;
-  if (!h.retireReason) h.retireReason = '引退';
-  const rk = horseRankLabel(h);
-  h.rank = rk; h.score = horseScore(h);
-  const keep = { ...h, log: h.log.slice(0, 10) };
-  S.horses.unshift(keep);
-  S.activeHorse = null;
-  const bonus = 10 + h.g1Wins * 20;
-  S.carrots += bonus;
-  save();
-  modal(`<h2>引退</h2><div class="rank-big" style="color:${rankColor(rk)}">${rk}</div>
-    <p class="center"><b>${esc(h.name)}</b><br>${esc(h.retireReason)}</p>
-    <div class="apt"><span>戦績 ${h.record.join('-')}</span><span>獲得賞金 ${fmtMoney(h.earnings)}</span></div>
-    ${h.titles.length ? `<p class="center">勝った重賞：${h.titles.map(esc).join('、')}</p>` : ''}
-    <p class="center">🥕 金のにんじん +${bonus}</p><p class="muted center">一覧に登録しました</p>
-    <button class="btn primary wide" data-close>ホームへ</button>`, { onClose: home });
-}
-
-// ===== 騎手の育成 =====
-function jockeyNew() {
-  let silk = Math.floor(Math.random() * SILKS.length);
-  const draw = () => {
-    render(`${header('騎手を育てる')}
-    <div class="page">
-      <div class="card center"><div class="foal" style="--c:${hex(SILKS[silk])}"><span>🏇</span></div><p>競馬学校に新しい生徒が入学します。<br>2年間鍛えてデビューさせよう。</p></div>
-      <div class="card"><label>騎手の名前</label>
-        <div class="row"><input id="jname" maxlength="10" value="${esc(randomJockeyName())}"><button class="btn" data-act="rand">🎲</button></div>
-        <label>勝負服の色</label>
-        <div class="chips">${SILKS.map((c, i) => `<button class="chip sw ${i === silk ? 'on' : ''}" data-act="silk" data-v="${i}"><i style="background:${hex(c)}"></i></button>`).join('')}</div></div>
-      <button class="btn primary wide" data-act="start">入学する</button>
-    </div>`);
-    bind({ go, rand: () => { document.getElementById('jname').value = randomJockeyName(); },
-      silk: (v) => { const n = document.getElementById('jname').value; silk = +v; draw(); document.getElementById('jname').value = n; },
-      start: () => { const j = createJockey(document.getElementById('jname').value.trim(), { silk }); j.log.unshift(`${j.name}が競馬学校に入学した！`); S.activeJockey = j; save(); jockeyTrain(); } });
-  };
-  draw();
-}
-
-function jockeyTrain() {
-  const j = S.activeJockey;
-  if (!j) return home();
-  const fatCol = j.fatigue < 40 ? '#3ddc84' : j.fatigue < 70 ? '#ffc93d' : '#ff4d4d';
-  const mock = mockAvailable(j);
-  render(`${header(esc(j.name))}
-  <div class="page">
-    <div class="card hcard"><div class="hc-top"><div class="dot" style="background:${hex(SILKS[j.silk])}"></div><div><b>${jCalText(j)}</b><small>16歳で入学</small></div></div>
-      <div class="hc-mid"><span class="cond" style="background:${COND_COLORS[j.cond]}">${COND_NAMES[j.cond]}</span>
-        <div class="fat"><small>疲労</small><div class="bar"><i style="width:${j.fatigue}%;background:${fatCol}"></i></div></div></div>
-      ${j.injury ? `<div class="injury">🩹 ${esc(j.injury.name)}（あと${j.injury.months}か月）</div>` : ''}</div>
-    <div class="card">${J_KEYS.map(k => statRow(J_NAMES[k], j.s[k])).join('')}
-      <div class="muted small">技術：左右の動き／ムチ：ムチの効き／バランス：体力の減りにくさ／体力：ムチを連続で打てる／判断：スタート</div></div>
-    ${mock ? '<button class="btn race wide" data-act="mock">🏁 模擬レースに出る（大きく成長）</button>' : ''}
-    <div class="sec">トレーニング</div>
-    ${j.injury ? '<button class="btn wide" data-act="treat">🩹 治療に専念する</button>' : `<div class="grid">${J_MENU.map(m => `<button class="tbtn ${m.g ? '' : 'rest'}" data-act="act" data-v="${m.id}"><b>${m.name}</b><small>${m.desc}</small>${m.g ? `<span class="tmeta">疲労+${m.f}</span>` : ''}</button>`).join('')}</div>`}
-    <div class="sec">できごと</div><div class="log">${j.log.slice(0, 8).map(l => `<div>${esc(l)}</div>`).join('')}</div>
-  </div>`);
-  bind({ go,
-    act: (id) => jAfter(j, doJAction(j, id)),
-    treat: () => jAfter(j, doJTreat(j)),
-    mock: () => {
-      const horse = { spd: 40, sta: 45, pow: 40, gut: 40, wis: 40 };
-      startRace({ race: { name: '競馬学校 模擬レース', dist: pick([1200, 1400, 1600]), surf: '芝', place: '学校', lv: 34, prize: 0 }, fieldSize: 8,
-        player: { name: '学校の馬', jname: j.name, h: horse, j: { ...j.s }, apt: 'A', cond: 2, style: '先行', coat: 0, silk: j.silk },
-        onDone: (res) => { if (!res) return jockeyTrain(); const out = afterMock(j, res.pos, res.field); out.title = `模擬レース ${res.pos}着`; jAfter(j, out); } });
-    } });
-}
-
-function jAfter(j, out) {
-  for (const m of out.msgs) j.log.unshift(m);
-  if (Object.keys(out.gains).length) j.log.unshift(`${out.title}：` + Object.entries(out.gains).filter(([, v]) => v > 0).map(([k, v]) => `${J_NAMES[k]}+${v}`).join(' '));
-  if (out.injury) j.log.unshift(`ケガ：${out.injury.name}`);
-  j.log = j.log.slice(0, 30); save();
-  let html = `<h2>${esc(out.title)}</h2>${gainsHtml(out.gains, J_NAMES)}${out.msgs.map(m => `<p>${esc(m)}</p>`).join('')}`;
-  if (out.injury) html += `<div class="injury big">⚠️ ${esc(out.injury.name)}<br><small>${out.injury.months}か月の休養</small></div>`;
-  modal(html + '<button class="btn primary wide" data-close>OK</button>', { onClose: () => {
-    if (out.debut) {
-      j.debuted = true; j.id = newId(); j.log.unshift('デビュー！'); S.jockeys.unshift(j); S.activeJockey = null; S.carrots += 10; save();
-      const total = J_KEYS.reduce((a, k) => a + j.s[k], 0) / 5;
-      modal(`<h2>デビュー！</h2><div class="rank-big" style="color:${rankColor(rankOf(total))}">${rankOf(total)}</div><p class="center"><b>${esc(j.name)}</b> が騎手としてデビューした！<br>馬の育成で騎手に選べるようになりました。</p><p class="center">🥕 +10</p><button class="btn primary wide" data-close>ホームへ</button>`, { onClose: home });
-    } else jockeyTrain();
-  } });
-}
 
 // ===== 一覧 =====
 function listScreen(tab = 'h') {
@@ -344,8 +81,8 @@ function listScreen(tab = 'h') {
       <small>${h.record.join('-')}　${fmtMoney(h.earnings)}${h.g1Wins ? `　G1 ${h.g1Wins}勝` : ''}</small>
       <small class="muted">${esc(h.retireReason || '')}</small></div></button>`).join('') : '<div class="empty">まだ引退した馬はいません。<br>馬を育てて引退させると、ここに残ります。</div>')
     : (jockeys.length ? jockeys.map((j, i) => { const avg = J_KEYS.reduce((a, k) => a + j.s[k], 0) / 5; return `<button class="lcard" data-act="jd" data-v="${i}">
-      <div class="lrank" style="color:${rankColor(rankOf(avg))}">${rankOf(avg)}</div>
-      <div class="linfo"><b><i class="dot sm" style="background:${hex(SILKS[j.silk])}"></i>${esc(j.name)}</b><small>${j.races}戦${j.wins}勝${j.g1Wins ? `　G1 ${j.g1Wins}勝` : ''}</small></div></button>`; }).join('') : '<div class="empty">まだデビューした騎手はいません。</div>')}
+      <div class="lrank" style="color:${rankColor(j.rank || rankOf(avg))}">${j.rank || rankOf(avg)}</div>
+      <div class="linfo"><b><i class="dot sm" style="background:${hex(SILKS[j.silk])}"></i>${esc(j.name)}</b><small>${j.races}戦${j.wins}勝${j.g1Wins ? `　G1 ${j.g1Wins}勝` : ''}</small><small class="muted">${esc(j.retireReason || '')}</small></div></button>`; }).join('') : '<div class="empty">まだデビューした騎手はいません。</div>')}
   </div>`);
   bind({ go, tab: (v) => listScreen(v), hd: (i) => horseDetail(horses[+i]), jd: (i) => jockeyDetail(jockeys[+i]) });
 }
@@ -368,14 +105,15 @@ function horseDetail(h) {
 function jockeyDetail(j) {
   const m = modal(`<h2><i class="dot sm" style="background:${hex(SILKS[j.silk])}"></i>${esc(j.name)}</h2>
     ${J_KEYS.map(k => statRow(J_NAMES[k], j.s[k])).join('')}
-    <div class="apt"><span>${j.races}戦 ${j.wins}勝</span><span>${j.record.join('-')}</span><span>模擬レース ${j.mockWins}勝</span></div>
+    <div class="apt"><span>${j.races}戦 ${j.wins}勝</span><span>G1 ${j.g1Wins || 0}勝</span><span>${esc(j.retireReason || '')}</span></div>
+    ${j.titles && j.titles.length ? `<p>🏆 ${j.titles.slice(-12).map(esc).join('、')}</p>` : ''}
     <button class="btn ghost wide" data-a="del">一覧から消す</button><button class="btn primary wide" data-close>閉じる</button>`);
   m.el.querySelector('[data-a=del]').onclick = () => { if (confirm('本当に消しますか？')) { S.jockeys.splice(S.jockeys.indexOf(j), 1); save(); m.close(); listScreen('j'); } };
 }
 
 // ===== 対戦コード =====
 function encodeHorse(h, j) {
-  const o = { v: 1, n: h.name, s: h.s, a: h.apt, st: h.style, c: h.coat, jn: j ? j.name : '見習い騎手', js: j ? j.s : NPC_JOCKEY.s, sl: j ? j.silk : 6 };
+  const o = { v: 1, n: h.name, s: h.s, a: h.apt, st: h.style, c: h.coat, k: h.skills || [], jn: j ? j.name : NPC_JOCKEY.name, js: j ? j.s : NPC_JOCKEY.s, sl: j ? j.silk : 6 };
   return 'SNK-' + btoa(unescape(encodeURIComponent(JSON.stringify(o))));
 }
 function decodeHorse(code) {
@@ -422,7 +160,8 @@ function gachaScreen() {
 // ===== 対戦 =====
 function vsScreen() {
   const mine = [];
-  if (S.activeHorse && stageOf(S.activeHorse) === 2) mine.push({ h: S.activeHorse, label: '育成中' });
+  const ap = S.activeHorse && S.activeHorse.p;
+  if (ap && stageOf(ap) === 'tc') mine.push({ h: { name: ap.name, s: ap.st, apt: ap.apt, style: ap.style, coat: ap.coat, skills: ap.skills }, label: '育成中' });
   for (const h of S.horses) mine.push({ h, label: '引退馬' });
   let sel = 0, jsel = -1, rsel = 0;
   const friends = [];
@@ -435,7 +174,7 @@ function vsScreen() {
       <div class="sec">自分の馬</div>
       <div class="plist">${mine.map((x, i) => `<button class="pitem ${i === sel ? 'on' : ''}" data-act="sel" data-v="${i}"><b>${esc(x.h.name)}</b><small>${x.label}　${H_KEYS.map(k => rankOf(x.h.s[k])).join('')}</small></button>`).join('')}</div>
       <div class="sec">騎手</div>
-      <div class="chips"><button class="chip ${jsel === -1 ? 'on' : ''}" data-act="js" data-v="-1">見習い騎手</button>${S.jockeys.map((j, i) => `<button class="chip ${jsel === i ? 'on' : ''}" data-act="js" data-v="${i}">${esc(j.name)}</button>`).join('')}</div>
+      <div class="chips"><button class="chip ${jsel === -1 ? 'on' : ''}" data-act="js" data-v="-1">${NPC_JOCKEY.name}</button>${S.jockeys.map((j, i) => `<button class="chip ${jsel === i ? 'on' : ''}" data-act="js" data-v="${i}">${esc(j.name)}</button>`).join('')}</div>
       <div class="sec">レース</div>
       <select id="rsel">${presets.map((r, i) => `<option value="${i}" ${i === rsel ? 'selected' : ''}>${r.g ? r.g + ' ' : ''}${r.name}（${r.surf}${r.dist}m）</option>`).join('')}</select>
       ${rsel === 0 ? `<div class="row2"><select id="fsurf"><option ${presets[0].surf === '芝' ? 'selected' : ''}>芝</option><option ${presets[0].surf === 'ダ' ? 'selected' : ''}>ダ</option></select>
@@ -462,9 +201,9 @@ function vsScreen() {
         const r = { ...presets[rsel] };
         const avg = H_KEYS.reduce((a, k) => a + h.s[k], 0) / 5;
         r.lv = r.g === 'G1' ? 80 : avg; r.prize = 0;
-        const opps = friends.map((f, i) => ({ name: f.n, jname: f.jn, h: { ...f.s }, j: { ...f.js }, apt: r.surf === '芝' ? f.a.turf : f.a.dirt, cond: 2, style: f.st, coat: f.c, silk: SILKS[f.sl ?? i] }));
+        const opps = friends.map((f, i) => ({ name: f.n, jname: f.jn, h: { ...f.s }, j: { ...f.js }, apt: r.surf === '芝' ? f.a.turf : f.a.dirt, cond: 2, style: f.st, coat: f.c, silk: SILKS[f.sl ?? i], hsk: f.k || [] }));
         startRace({ race: r, fieldSize: r.g ? 14 : 12, opponents: opps,
-          player: { name: h.name, jname: j.name, h: { ...h.s }, j: { ...j.s }, apt: r.surf === '芝' ? h.apt.turf : h.apt.dirt, cond: 2, style: h.style, coat: h.coat, silk: j.silk ?? 6 },
+          player: { name: h.name, jname: j.name, h: { ...h.s }, j: { ...j.s }, apt: r.surf === '芝' ? h.apt.turf : h.apt.dirt, cond: 2, style: h.style, coat: h.coat, silk: j.silk ?? 6, hsk: h.skills || [], jsk: j.skills || [] },
           onDone: (res) => {
             if (res && res.pos === 1) { S.carrots += 5; save(); toast('勝利！ 🥕+5'); }
             draw();
