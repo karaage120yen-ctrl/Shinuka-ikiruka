@@ -147,7 +147,7 @@ export function startRace(cfg) {
     $('b-whip').classList.toggle('cool', pl.whipCool > 0);
     if (SPEC) { const top = [...race.racers].sort((a, b) => (a.rank || 99) - (b.rank || 99)).slice(0, 3); $('h-msg2').innerHTML = top.map((r, i) => `<span><small>${i + 1}</small>${r.num}</span>`).join(''); }
     if (!SPEC && pl.blocked && !pl.finished) { blockedT += dt; if (blockedT > 0.8 && msgT <= 0) say('前が詰まっている！ 左右に動け！', 1.3, 'warn'); } else blockedT = 0;
-    if (!SPEC && ratio <= 0 && !pl.finished && msgT <= 0 && race.started) say('スタミナ切れ…！', 1.2, 'warn');
+    if (!SPEC && ratio <= 0 && !pl.finished && msgT <= 0 && race.started) say('スタミナ切れ！ 脚が止まった…（ムチも効かない）', 1.6, 'warn');
     msgT -= dt; if (msgT <= 0) msgEl.classList.remove('show');
     drawMap();
     // 横に馬がいるときは画面のはしを光らせる

@@ -228,14 +228,19 @@ export function stepRace(race, dt, input) {
         else if (gap < -4 && gap > -40) target += 0.06;
       }
     }
-    if (whipping && r.whipT > 0) target += (r.isPlayer && !r.ai ? 1.15 : 1) * r.whipDv * (r.energy > 0 ? 1 : 0.3) + (rem < 400 ? r.h.gut * 0.002 : 0);
+    if (whipping && r.whipT > 0 && r.energy > 0) target += (r.isPlayer && !r.ai ? 1.15 : 1) * r.whipDv + (rem < 400 ? r.h.gut * 0.002 : 0);
     // 競り合い（根性）
     if (rem < 420 && !r.finished) {
       for (const o of rs) if (o !== r && Math.abs(o.p - r.p) < 1.6 && Math.abs(o.d - r.d) < 2.6) { target += 0.12 * r.konjo * r.h.gut / 100; break; }
     }
     // スタミナ切れ
-    if (r.energy <= 0) target = Math.min(target, r.top * (0.85 + 0.0007 * r.h.gut) + (whipping ? 0.15 : 0));
-    else if (ratio < 0.12) target *= 0.95 + 0.0005 * r.h.gut;
+    // スタミナ切れ：はっきりバテる。切れている時間が長いほど、どんどん遅くなる（根性で少しだけこらえる）
+    if (r.energy <= 0 && !r.finished) {
+      r.emptyT = (r.emptyT || 0) + dt;
+      const floor = 0.74 + 0.0006 * r.h.gut - Math.min(0.1, r.emptyT * 0.012);
+      target = Math.min(target, r.top * floor);
+      whipping = false;
+    } else if (ratio < 0.15) target *= 0.9 + ratio / 0.15 * 0.08 + 0.0003 * r.h.gut;
     if (rem < r.spurtDist) target *= r.sue;
     // 坂（上りは遅くなる。パワーがあると楽）
     if (HILL.length) { const g = grade(r.u); target *= g > 0 ? 1 - g * 3 * (1 - r.h.pow / 200) : 1 - g * 1.2; r.slope = g; } else r.slope = 0;
@@ -248,7 +253,7 @@ export function stepRace(race, dt, input) {
       if (du > 0 && du < 2.7 && Math.abs(o.d - r.d) < 0.95) { if (target > o.v + 0.05) { target = o.v + 0.05; r.blocked = true; } }
     }
     // ---- 加速 ----
-    const a = r.v < 13 ? r.startAccel : (target > r.v ? r.accel : 0.9);
+    const a = r.v < 13 ? r.startAccel : (target > r.v ? r.accel : r.energy <= 0 ? 2.2 : 0.9);
     if (r.v < target) r.v = Math.min(target, r.v + a * dt); else r.v = Math.max(target, r.v - a * dt);
     if (r.bump > 0) { r.v -= 0.5 * dt; r.bump -= dt; }
     // ---- スタミナ ----
