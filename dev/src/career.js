@@ -1,6 +1,6 @@
 // ===== 育成エンジン（サッカーやるよんと同じ流れ） =====
 // スカウト（作成）→ キャンプ（年の方針）→ ターン（行動を1つ）→ 出来事 → ターンの結果 → 年間総括 → オファー → … → 引退
-import { H_KEYS, H_NAMES, J_KEYS, J_NAMES, COAT, SIRE, DAM, SILKS, GRADED, CLASS_INFO, PLACES, APT_LETTERS, STYLES,
+import { H_KEYS, H_NAMES, J_KEYS, J_NAMES, COAT, SIRE, DAM, SILKS, GRADED, OVERSEAS, CLASS_INFO, PLACES, APT_LETTERS, STYLES,
   rnd, irnd, pick, clamp, randomHorseName, randomJockeyName } from './data.js';
 import { EVENTS } from './events.js';
 
@@ -192,7 +192,7 @@ export function makeHorse(d = {}) {
   if (legend) { const top = [...H_KEYS].sort(() => Math.random() - 0.5).slice(0, 3); for (const k of top) cap[k] = ri(97, 99); }
   const coat = d.coat ?? ri(0, COAT.length - 1);
   const p = {
-    kind: 'horse', name: d.name || randomHorseName(), coat, sire: d.sire || pick(SIRE), dam: d.dam || pick(DAM),
+    kind: 'horse', name: d.name || randomHorseName(), coat, sire: d.sire || pick(SIRE), dam: d.dam || pick(DAM), sex: d.sex || (Math.random() < 0.5 ? '牡' : '牝'), gen: 0,
     style, growth: d.growth || pick(['early', 'normal', 'normal', 'late']), pot, st, cap,
     apt: { turf: APT_LETTERS[clamp(Math.round(rnd(2.6, 6.6)), 0, 6)], dirt: APT_LETTERS[clamp(Math.round(rnd(1.6, 6.6)), 0, 6)] },
     age: 0, year: 2027, month: 5, season: 0, sta: 90, cond: 70, pop: 5, eval: 50, money: 1500, inj: 0, injName: '',
@@ -352,6 +352,10 @@ export function racesInTurn(p) {
       const can = r.g === 'G1' ? (r.age === '2' ? p.wins >= 1 : (p.wins >= 2 || p.gradedWins >= 1)) : p.wins >= 1;
       out.push({ ...r, cls: 6, lv: gradeLv(r), locked: !can, path: inPath(p, r.surf, r.dist) });
     }
+    if (p.age >= 3) for (const r of OVERSEAS) {
+      if (r.m !== m || (r.age === '4+' && p.age < 4)) continue;
+      out.push({ ...r, cls: 7, lv: 84, locked: !(p.g1Wins >= 1 || p.gradedWins >= 3), path: inPath(p, r.surf, r.dist), cost: 300 });
+    }
   }
   return out.sort((a, b) => (a.m - b.m) || ((b.g ? 1 : 0) - (a.g ? 1 : 0)) || ((b.path ? 1 : 0) - (a.path ? 1 : 0)));
 }
@@ -362,6 +366,7 @@ export function bigRacesInTurn(p) {
     const need = r.g === 'G1' ? 55 : r.g === 'G2' ? 45 : 35;
     out.push({ ...r, lv: gradeLv(r), locked: p.eval < need, need });
   }
+  for (let m = p.month; m <= turnEnd(p); m++) for (const r of OVERSEAS) if (r.m === m) out.push({ ...r, lv: 84, locked: p.eval < 75, need: 75 });
   return out;
 }
 export const condIdx = (p) => { let i = p.cond < 20 ? 0 : p.cond < 40 ? 1 : p.cond < 70 ? 2 : p.cond < 90 ? 3 : 4; if (p.sta < 30) i = Math.max(0, i - 1); return i; };
@@ -460,7 +465,8 @@ function fateRoll(p, res) {
 // 馬のレース結果を反映
 export function applyHorseRace(p, race, rr, res) {
   const pos = rr.pos;
-  p.races.push({ y: p.year, age: p.age, m: race.m, name: race.name, g: race.g, surf: race.surf, dist: race.dist, pos, field: rr.field, time: rr.time, jockey: rr.jname || '' });
+  if (race.cost) { p.money -= race.cost; res.cost += race.cost; res.notes.push(`${race.abroad}への遠征費 ${yen(race.cost)}`); }
+  p.races.push({ y: p.year, age: p.age, m: race.m, name: race.name, g: race.g, surf: race.surf, dist: race.dist, pos, field: rr.field, time: rr.time, jockey: rr.jname || '', abroad: race.abroad || null, going: race.going, weather: race.weather });
   p.record[Math.min(pos, 4) - 1]++;
   let prize = pos <= 5 ? race.prize * [1, 0.4, 0.25, 0.15, 0.1][pos - 1] : 0;
   p.money += prize * 0.8; p.earnings += prize; res.inc += prize * 0.8;
@@ -745,7 +751,7 @@ export function toCard(p) {
   const base = { kind: p.kind, name: p.name, s: { ...p.st }, skills: [...p.skills], growth: p.growth, record: [...p.record], wins: p.wins, gradedWins: p.gradedWins,
     g1Wins: p.g1Wins, titles: [...p.titles], awards: [...p.awards], earnings: Math.round(p.earnings), score: sc, rank: gradeOf(sc),
     retireReason: p.fate ? p.fate.why : '引退', died: p.fate && p.fate.ty === 'death', age: p.age, year: p.year };
-  if (p.kind === 'horse') return { ...base, coat: p.coat, sire: p.sire, dam: p.dam, apt: { ...p.apt }, style: p.style, races: p.races.slice(-60) };
+  if (p.kind === 'horse') return { ...base, coat: p.coat, sire: p.sire, dam: p.dam, sex: p.sex, ped: p.ped || null, gen: p.gen || 0, sireId: p.sireId ?? null, damId: p.damId ?? null, foals: 0, apt: { ...p.apt }, style: p.style, races: p.races.slice(-60) };
   return { ...base, silk: p.silk, races: p.rides, rides: p.rides, mockWins: p.mockWins, pref: p.pref };
 }
 

@@ -1,6 +1,12 @@
+import { initNet } from './net.js';
 import { home } from './ui.js';
+import { startRace } from './racescreen.js';
+// テスト用：window.__race3d({ place, weather, going, surf, dist })
+window.__race3d = (o) => startRace({ race: { name: 'テスト', dist: o.dist || 1600, surf: o.surf || '芝', place: o.place, weather: o.weather, going: o.going, lv: 50 }, fieldSize: 10,
+  player: { name: 'テスト', jname: 'テスト', h: { spd: 60, sta: 60, pow: 60, gut: 60, wis: 60 }, j: { tec: 60, whip: 60, bal: 60, fit: 60, jud: 60 }, apt: 'A', cond: 2, style: '先行', coat: 0, silk: 1 }, onDone: () => {} });
 
 home();
+initNet();
 
 // ダブルタップでの拡大を防ぐ
 let lastTouch = 0;

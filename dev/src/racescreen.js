@@ -1,8 +1,9 @@
 // ===== レース画面（操作・HUD・結果） =====
-import { createRace, stepRace, makeOpponents, marginText, trackPos, TRACK, setSimSeed, fieldResult } from './sim.js';
+import { createRace, stepRace, makeOpponents, marginText, trackPos, TRACK, setSimSeed, fieldResult, setVenue, rollWeather } from './sim.js';
 import { RaceView } from './render3d.js';
 import { fmtTime, SILKS } from './data.js';
 import * as A from './audio.js';
+import { Commentator, setVoice, unlockVoice, stopVoice } from './commentary.js';
 import { S, save } from './store.js';
 
 let active = null;
@@ -13,13 +14,13 @@ export function startRace(cfg) {
   root.innerHTML = `
     <canvas id="race-canvas"></canvas>
     <div class="hud-top">
-      <div class="hud-race"><b>${cfg.race.g ? `<span class="grade g-${cfg.race.g}">${cfg.race.g}</span>` : ''}${cfg.race.name}</b><span>${cfg.race.place || ''} ${cfg.race.surf}${cfg.race.dist}m</span></div>
+      <div class="hud-race"><b>${cfg.race.g ? `<span class="grade g-${cfg.race.g}">${cfg.race.g}</span>` : ''}${cfg.race.name}</b><span>${cfg.race.place || ''} ${cfg.race.surf}${cfg.race.dist}m・${cfg.race.weather || ''}・${cfg.race.going || ''}</span></div>
       <div class="hud-stats"><div><small>順位</small><b id="h-rank">-</b></div><div><small>残り</small><b id="h-rem">-</b></div><div><small>タイム</small><b id="h-time">0:00.0</b></div></div>
     </div>
     <canvas id="minimap" width="220" height="130"></canvas>
     <button id="h-view" class="hud-small">視点</button>
     <button id="h-quit" class="hud-small hud-quit">中止</button>
-    <div id="h-msg" class="hud-msg"></div><div id="h-msg2" class="hud-top3"></div><div id="side-l" class="side l"></div><div id="side-r" class="side r"></div>
+    <div id="h-msg" class="hud-msg"></div><div id="h-call" class="hud-call"></div><div id="h-msg2" class="hud-top3"></div><div id="side-l" class="side l"></div><div id="side-r" class="side r"></div>
     <div class="hud-bottom">
       <div class="gauge-wrap"><div class="gauge-label"><span>体力</span><span id="h-speed">0 km/h</span></div><div class="gauge"><div id="h-gauge"></div></div></div>
       <div class="ctrl">
@@ -33,21 +34,26 @@ export function startRace(cfg) {
 
   const SPEC = !!cfg.spectate;
   let race;
+  setVenue(cfg.race.place);
+  if (!cfg.race.going) Object.assign(cfg.race, rollWeather(cfg.race.m || new Date().getMonth() + 1));
+  const GW = { going: cfg.race.going, weather: cfg.race.weather };
   if (SPEC) {
     setSimSeed(cfg.seed);
     const specs = cfg.specs.map((x, i) => i === (cfg.focus || 0) ? { ...x, isPlayer: true, ai: true } : { ...x });
-    race = createRace({ dist: cfg.race.dist, surf: cfg.race.surf, specs, fixedGates: true, noBand: true });
+    race = createRace({ dist: cfg.race.dist, surf: cfg.race.surf, specs, fixedGates: true, noBand: true, ...GW });
     root.classList.add('spectate');
   } else {
     const pSpec = { ...cfg.player, isPlayer: true, silk: SILKS[cfg.player.silk ?? 0] };
     const n = cfg.fieldSize || 12;
     const opps = cfg.opponents ? [...cfg.opponents] : [];
     if (opps.length < n - 1) opps.push(...makeOpponents(cfg.race, pSpec, n - 1 - opps.length));
-    race = createRace({ dist: cfg.race.dist, surf: cfg.race.surf, specs: [pSpec, ...opps] });
+    race = createRace({ dist: cfg.race.dist, surf: cfg.race.surf, specs: [pSpec, ...opps], ...GW });
   }
   const lowPower = /iPhone|iPad|Android/i.test(navigator.userAgent) && (navigator.hardwareConcurrency || 4) <= 4;
   const view = new RaceView(document.getElementById('race-canvas'), race, { view: SPEC ? 'tv' : (S.settings.view || 'fp'), title: cfg.race.name, lowPower });
   A.initAudio(); A.setSound(S.settings.sound); A.startCrowd(); A.crowdLevel(0.05);
+  setVoice(S.settings.voice !== false && S.settings.sound); unlockVoice();
+  const caller = new Commentator(race, { focus: () => race.player });
 
   const input = { steer: 0, whip: false, l: false, r: false };
   const $ = (id) => document.getElementById(id);
@@ -81,15 +87,15 @@ export function startRace(cfg) {
   const drawMap = () => {
     const c = mm.canvas; mm.clearRect(0, 0, c.width, c.height);
     const sx = (c.width - 16) / (TRACK.Ls + 2 * TRACK.R + 60), sz = (c.height - 16) / (2 * TRACK.R + 60);
-    const s = Math.min(sx, sz), ox = c.width / 2, oz = c.height / 2;
+    const s = Math.min(sx, sz), ox = c.width / 2, oz = c.height / 2, fx = TRACK.dir === -1 ? -1 : 1;
     mm.strokeStyle = 'rgba(255,255,255,0.75)'; mm.lineWidth = 6; mm.beginPath();
-    for (let u = 0; u <= TRACK.P; u += 20) { const p = trackPos(u, 10); const X = ox + p.x * s, Y = oz - p.z * s; u ? mm.lineTo(X, Y) : mm.moveTo(X, Y); }
+    for (let u = 0; u <= TRACK.P; u += 20) { const p = trackPos(u, 10); const X = ox + fx * p.x * s, Y = oz - p.z * s; u ? mm.lineTo(X, Y) : mm.moveTo(X, Y); }
     mm.closePath(); mm.stroke();
-    const g = trackPos(TRACK.finishU, 10); mm.fillStyle = '#ff3b3b'; mm.fillRect(ox + g.x * s - 1, oz - g.z * s - 6, 3, 12);
+    const g = trackPos(TRACK.finishU, 10); mm.fillStyle = '#ff3b3b'; mm.fillRect(ox + fx * g.x * s - 1, oz - g.z * s - 6, 3, 12);
     for (const r of race.racers) {
       const p = trackPos(r.u, r.d);
       mm.fillStyle = r.isPlayer ? '#ffe14d' : '#'+(r.silk ?? 0xffffff).toString(16).padStart(6, '0');
-      mm.beginPath(); mm.arc(ox + p.x * s, oz - p.z * s, r.isPlayer ? 4.5 : 3, 0, Math.PI * 2); mm.fill();
+      mm.beginPath(); mm.arc(ox + fx * p.x * s, oz - p.z * s, r.isPlayer ? 4.5 : 3, 0, Math.PI * 2); mm.fill();
       if (r.isPlayer) { mm.strokeStyle = '#000'; mm.lineWidth = 1; mm.stroke(); }
     }
   };
@@ -100,7 +106,7 @@ export function startRace(cfg) {
     const dt = Math.min(0.1, (now - last) / 1000); last = now;
     acc += dt * SPEED;
     let steps = 0;
-    input.steer = (input.r ? 1 : 0) - (input.l ? 1 : 0);
+    input.steer = ((input.r ? 1 : 0) - (input.l ? 1 : 0)) * (TRACK.dir === -1 ? -1 : 1);
     while (acc >= 1 / 60 && steps < 6 * SPEED) {
       stepRace(race, 1 / 60, input); input.whip = false; acc -= 1 / 60; steps++;
     }
@@ -126,6 +132,8 @@ export function startRace(cfg) {
       const c = Math.ceil(race.countdown);
       if (c !== lastCount && c > 0) { lastCount = c; say(String(c), 0.9, 'big'); }
     }
+    caller.update(dt * (race.countdown > 0 ? 0 : 1));
+    if (caller.lines.length) { $('h-call').textContent = caller.lines[caller.lines.length - 1]; $('h-call').classList.add('show'); caller.lines.length = 0; }
     view.update(dt); view.render();
     // HUD
     const pl = race.player;
@@ -188,7 +196,7 @@ export function startRace(cfg) {
     if (ended === 'done') return; ended = 'done';
     cancelAnimationFrame(raf);
     window.removeEventListener('keydown', kd); window.removeEventListener('keyup', ku);
-    A.stopCrowd();
+    A.stopCrowd(); stopVoice();
     view.dispose();
     root.classList.add('hidden'); root.classList.remove('spectate'); root.innerHTML = '';
     if (SPEC) setSimSeed(null);

@@ -22,9 +22,13 @@ function load() {
   return DEFAULT();
 }
 
+const saveHooks = [];
+export const onSave = (f) => saveHooks.push(f);
 export function save() {
   try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* 容量不足など */ }
+  saveHooks.forEach(f => { try { f(); } catch (e) { /* */ } });
 }
+export function replaceAll(o) { S = Object.assign(DEFAULT(), o); }
 
 export function newId() { const id = S.nextId++; save(); return id; }
 

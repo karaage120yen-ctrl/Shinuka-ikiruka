@@ -22,52 +22,72 @@ function cylDir(r1, r2, len, start, ang, seg = 10) {
 }
 
 const geoCache = {};
+const NI = (x) => x.index ? x.toNonIndexed() : x;
 function horseGeos() {
   if (geoCache.h) return geoCache.h;
+  // 胴体：き甲・胸・肋・腹・トモを重ねて筋肉の起伏を出す
   const body = mergeGeometries([
-    g(new THREE.CapsuleGeometry(0.4, 1.25, 6, 14), V(0, 1.27, 0), Math.PI / 2, V(1.06, 1, 0.82)),
-    g(new THREE.SphereGeometry(0.45, 14, 10), V(0.62, 1.25, 0), 0, V(1, 1.02, 0.8)),
-    g(new THREE.SphereGeometry(0.47, 14, 10), V(-0.64, 1.3, 0), 0, V(1, 1, 0.86)),
-    g(new THREE.SphereGeometry(0.3, 10, 8), V(0.5, 1.5, 0), 0, V(1.2, 0.8, 0.7)), // き甲
-  ].map(x => x.toNonIndexed ? x.toNonIndexed() : x));
+    g(new THREE.CapsuleGeometry(0.39, 1.2, 8, 20), V(0, 1.27, 0), Math.PI / 2, V(1.06, 1, 0.8)),
+    g(new THREE.SphereGeometry(0.46, 20, 14), V(0.64, 1.24, 0), 0, V(1, 1.04, 0.78)),
+    g(new THREE.SphereGeometry(0.3, 14, 10), V(0.72, 1.05, 0.14), 0, V(0.8, 1, 0.7)),   // 肩
+    g(new THREE.SphereGeometry(0.3, 14, 10), V(0.72, 1.05, -0.14), 0, V(0.8, 1, 0.7)),
+    g(new THREE.SphereGeometry(0.48, 20, 14), V(-0.62, 1.3, 0), 0, V(1.02, 1, 0.86)),  // トモ
+    g(new THREE.SphereGeometry(0.32, 14, 10), V(-0.72, 1.14, 0.17), 0, V(1, 1.1, 0.7)),
+    g(new THREE.SphereGeometry(0.32, 14, 10), V(-0.72, 1.14, -0.17), 0, V(1, 1.1, 0.7)),
+    g(new THREE.SphereGeometry(0.3, 14, 10), V(0.48, 1.52, 0), 0, V(1.25, 0.75, 0.66)), // き甲
+    g(new THREE.SphereGeometry(0.36, 16, 10), V(0, 1.06, 0), 0, V(1.6, 0.6, 0.85)),    // 腹
+  ].map(NI));
   // 首と頭（首の付け根が原点）
   const alpha = 0.42, beta = -1.05;
   const E = V(Math.cos(alpha) * 0.95, Math.sin(alpha) * 0.95, 0);
+  const hd = (t) => E.clone().add(V(Math.cos(beta) * t, Math.sin(beta) * t, 0));
   const neck = mergeGeometries([
-    cylDir(0.27, 0.15, 1.0, V(-0.05, -0.05, 0), alpha, 12).toNonIndexed(),
-    g(new THREE.SphereGeometry(0.17, 10, 8), E.clone(), 0, V(1, 1, 0.85)).toNonIndexed(),
-    cylDir(0.15, 0.085, 0.58, E.clone().add(V(0.02, 0.02, 0)), beta, 10).toNonIndexed(),
-    g(new THREE.SphereGeometry(0.09, 8, 6), E.clone().add(V(Math.cos(beta) * 0.58, Math.sin(beta) * 0.58 + 0.01, 0)), 0, V(1.1, 0.9, 0.9)).toNonIndexed(),
-  ]);
+    cylDir(0.28, 0.15, 1.0, V(-0.05, -0.05, 0), alpha, 18),
+    g(new THREE.SphereGeometry(0.2, 12, 8), V(Math.cos(alpha) * 0.35 - 0.03, Math.sin(alpha) * 0.35 + 0.1, 0), alpha, V(1.6, 0.7, 0.65)), // たてがみの下の盛り上がり
+    g(new THREE.SphereGeometry(0.17, 14, 10), E.clone(), 0, V(1.05, 1, 0.82)),
+    g(new THREE.SphereGeometry(0.15, 14, 10), hd(0.12).add(V(-0.03, 0, 0)), beta, V(1, 1.2, 0.95)), // ほお
+    cylDir(0.14, 0.085, 0.56, E.clone().add(V(0.02, 0.02, 0)), beta, 14),
+    g(new THREE.SphereGeometry(0.095, 10, 8), hd(0.58).add(V(0, 0.01, 0)), 0, V(1.15, 0.9, 0.95)), // 鼻先
+  ].map(NI));
   const ears = mergeGeometries([
-    g(new THREE.ConeGeometry(0.035, 0.15, 6), E.clone().add(V(-0.04, 0.16, 0.07)), -0.25, null, 0.15).toNonIndexed(),
-    g(new THREE.ConeGeometry(0.035, 0.15, 6), E.clone().add(V(-0.04, 0.16, -0.07)), -0.25, null, -0.15).toNonIndexed(),
-  ]);
-  const mane = g(new THREE.BoxGeometry(0.95, 0.07, 0.035), V(Math.cos(alpha) * 0.45 - Math.sin(alpha) * 0.17, Math.sin(alpha) * 0.45 + Math.cos(alpha) * 0.17, 0), alpha);
+    g(new THREE.ConeGeometry(0.035, 0.16, 8), E.clone().add(V(-0.04, 0.17, 0.065)), -0.25, null, 0.15),
+    g(new THREE.ConeGeometry(0.035, 0.16, 8), E.clone().add(V(-0.04, 0.17, -0.065)), -0.25, null, -0.15),
+  ].map(NI));
+  // たてがみ：細い板を何枚も並べる
+  const maneParts = [];
+  for (let i = 0; i < 12; i++) {
+    const t = 0.08 + i * 0.075;
+    const pz = (i % 2 ? 0.03 : -0.03);
+    maneParts.push(g(new THREE.BoxGeometry(0.09, 0.14 + (i % 3) * 0.03, 0.03), V(Math.cos(alpha) * t - Math.sin(alpha) * 0.2, Math.sin(alpha) * t + Math.cos(alpha) * 0.2, pz), alpha - 0.6));
+  }
+  maneParts.push(g(new THREE.BoxGeometry(0.12, 0.1, 0.05), E.clone().add(V(-0.02, 0.16, 0)), 0.6)); // 前髪
+  const mane = mergeGeometries(maneParts.map(NI));
   const eyes = mergeGeometries([
-    g(new THREE.SphereGeometry(0.03, 6, 5), E.clone().add(V(0.12, -0.05, 0.11))).toNonIndexed(),
-    g(new THREE.SphereGeometry(0.03, 6, 5), E.clone().add(V(0.12, -0.05, -0.11))).toNonIndexed(),
-  ]);
-  const bit = E.clone().add(V(Math.cos(beta) * 0.5, Math.sin(beta) * 0.5, 0));
-  const upperF = g(new THREE.CylinderGeometry(0.075, 0.11, 0.5, 8), V(0, -0.25, 0));
-  const lowerF = mergeGeometries([
-    g(new THREE.CylinderGeometry(0.042, 0.05, 0.46, 7), V(0, -0.23, 0)).toNonIndexed(),
-    g(new THREE.SphereGeometry(0.06, 7, 5), V(0, -0.47, 0)).toNonIndexed(),
-  ]);
-  const hoof = g(new THREE.CylinderGeometry(0.055, 0.07, 0.09, 8), V(0.01, -0.03, 0));
-  const upperH = g(new THREE.CylinderGeometry(0.08, 0.15, 0.58, 8), V(0, -0.29, 0));
-  const lowerH = mergeGeometries([
-    g(new THREE.CylinderGeometry(0.042, 0.055, 0.5, 7), V(0, -0.25, 0)).toNonIndexed(),
-    g(new THREE.SphereGeometry(0.06, 7, 5), V(0, -0.5, 0)).toNonIndexed(),
-  ]);
-  const tail = mergeGeometries([
-    g(new THREE.CylinderGeometry(0.09, 0.035, 0.8, 7), V(0, -0.4, 0)).toNonIndexed(),
-  ]);
+    g(new THREE.SphereGeometry(0.032, 8, 6), E.clone().add(V(0.1, -0.04, 0.115))),
+    g(new THREE.SphereGeometry(0.032, 8, 6), E.clone().add(V(0.1, -0.04, -0.115))),
+    g(new THREE.SphereGeometry(0.022, 6, 5), hd(0.6).add(V(0.04, -0.02, 0.06))),  // 鼻の穴
+    g(new THREE.SphereGeometry(0.022, 6, 5), hd(0.6).add(V(0.04, -0.02, -0.06))),
+  ].map(NI));
+  const blaze = g(new THREE.PlaneGeometry(0.07, 0.5), hd(0.3).add(V(0.075 * Math.sin(-beta), 0.075 * Math.cos(beta) * 0 + 0.07, 0)), beta - Math.PI / 2, null, 0, Math.PI / 2);
+  const bit = hd(0.5);
+  // 脚：上・管・つなぎ（球節で曲がる）
+  const upperF = mergeGeometries([g(new THREE.CylinderGeometry(0.07, 0.115, 0.48, 10), V(0, -0.24, 0)), g(new THREE.SphereGeometry(0.075, 8, 6), V(0, -0.48, 0), 0, V(1, 1.1, 0.9))].map(NI));
+  const lowerF = mergeGeometries([g(new THREE.CylinderGeometry(0.04, 0.05, 0.38, 8), V(0, -0.19, 0)), g(new THREE.SphereGeometry(0.058, 8, 6), V(0, -0.39, 0))].map(NI));
+  const pastF = mergeGeometries([g(new THREE.CylinderGeometry(0.038, 0.042, 0.13, 8), V(0.02, -0.06, 0), 0.25)].map(NI));
+  const hoof = g(new THREE.CylinderGeometry(0.055, 0.072, 0.09, 10), V(0.03, -0.155, 0));
+  const upperH = mergeGeometries([g(new THREE.CylinderGeometry(0.08, 0.16, 0.56, 10), V(0, -0.28, 0)), g(new THREE.SphereGeometry(0.08, 8, 6), V(-0.02, -0.56, 0), 0, V(1.3, 1, 0.8))].map(NI));
+  const lowerH = mergeGeometries([g(new THREE.CylinderGeometry(0.042, 0.055, 0.44, 8), V(0, -0.22, 0)), g(new THREE.SphereGeometry(0.06, 8, 6), V(0, -0.45, 0))].map(NI));
+  const sock = g(new THREE.CylinderGeometry(0.047, 0.052, 0.2, 8), V(0, -0.33, 0));
+  // しっぽ：何本かの房
+  const tailParts = [g(new THREE.CylinderGeometry(0.07, 0.05, 0.25, 8), V(0, -0.12, 0))];
+  for (let i = 0; i < 6; i++) { const a2 = (i / 6) * Math.PI * 2; tailParts.push(g(new THREE.ConeGeometry(0.045, 0.75, 6), V(Math.cos(a2) * 0.025, -0.55, Math.sin(a2) * 0.03), Math.PI + Math.cos(a2) * 0.08, null, Math.sin(a2) * 0.08)); }
+  const tail = mergeGeometries(tailParts.map(NI));
   const saddle = mergeGeometries([
-    g(new THREE.BoxGeometry(0.5, 0.06, 0.42), V(0.1, 1.69, 0)).toNonIndexed(),
-    g(new THREE.BoxGeometry(0.16, 0.08, 0.36), V(0.32, 1.72, 0)).toNonIndexed(),
-  ]);
-  geoCache.h = { body, neck, ears, mane, eyes, upperF, lowerF, hoof, upperH, lowerH, tail, saddle, bit, alpha };
+    g(new THREE.BoxGeometry(0.5, 0.06, 0.42), V(0.1, 1.69, 0)),
+    g(new THREE.BoxGeometry(0.16, 0.08, 0.36), V(0.32, 1.72, 0)),
+    g(new THREE.TorusGeometry(0.4, 0.025, 6, 20, Math.PI), V(0.1, 1.3, 0), 0, null, 0, Math.PI / 2), // 腹帯
+  ].map(NI));
+  geoCache.h = { body, neck, ears, mane, eyes, blaze, upperF, lowerF, pastF, hoof, upperH, lowerH, sock, tail, saddle, bit, alpha };
   return geoCache.h;
 }
 
@@ -132,18 +152,24 @@ export function buildHorse(coat, silkColor, num, opts = {}) {
   nose.position.copy(G.bit).add(V(-0.08, 0.1, 0)); nose.rotation.y = Math.PI / 2; nose.rotation.x = 0.6; neckP.add(nose);
   // 脚
   const legs = [];
-  const mk = (x, y, z, front, off) => {
+  const socks = opts.socks ?? Math.floor(Math.random() * 16);
+  const white = mat(0xf4f1ea, { roughness: 0.6 });
+  const mk = (x, y, z, front, off, bitN) => {
     const hip = new THREE.Group(); hip.position.set(x, y, z); bodyG.add(hip);
     hip.add(new THREE.Mesh(front ? G.upperF : G.upperH, legMat));
-    const knee = new THREE.Group(); knee.position.y = front ? -0.5 : -0.58; hip.add(knee);
+    const knee = new THREE.Group(); knee.position.y = front ? -0.48 : -0.56; hip.add(knee);
     knee.add(new THREE.Mesh(front ? G.lowerF : G.lowerH, legMat));
-    const hf = new THREE.Mesh(G.hoof, hoofMat); hf.position.y = front ? -0.5 : -0.52; knee.add(hf);
-    legs.push({ hip, knee, front, off });
+    if (socks & bitN) knee.add(new THREE.Mesh(G.sock, white));
+    const fet = new THREE.Group(); fet.position.y = front ? -0.39 : -0.45; knee.add(fet);
+    fet.add(new THREE.Mesh(G.pastF, (socks & bitN) ? white : legMat));
+    fet.add(new THREE.Mesh(G.hoof, hoofMat));
+    legs.push({ hip, knee, fet, front, off });
   };
-  mk(0.62, 1.12, 0.17, true, 0.5);   // 左前（+zが右）
-  mk(0.62, 1.12, -0.17, true, 0.62);
-  mk(-0.66, 1.2, 0.17, false, 0.0);
-  mk(-0.66, 1.2, -0.17, false, 0.1);
+  mk(0.62, 1.12, 0.17, true, 0.5, 1);
+  mk(0.62, 1.12, -0.17, true, 0.62, 2);
+  mk(-0.66, 1.2, 0.17, false, 0.0, 4);
+  mk(-0.66, 1.2, -0.17, false, 0.1, 8);
+  if (opts.blaze ?? Math.random() < 0.35) neckP.add(new THREE.Mesh(G.blaze, new THREE.MeshStandardMaterial({ color: 0xf4f1ea, roughness: 0.6, side: THREE.DoubleSide })));
   // しっぽ
   const tailP = new THREE.Group(); tailP.position.set(-1.08, 1.45, 0); bodyG.add(tailP);
   tailP.add(new THREE.Mesh(G.tail, maneMat));
@@ -170,12 +196,15 @@ export function animateHorse(H, stride, v, t) {
   const amp = Math.min(1, v / 14);
   for (const L of H.legs) {
     const p = ph + L.off * Math.PI * 2;
+    const sw = Math.sin(p), cs = Math.cos(p);
     if (L.front) {
-      L.hip.rotation.z = (0.62 * Math.sin(p) + 0.05) * amp;
-      L.knee.rotation.z = -1.5 * Math.max(0, Math.cos(p)) * amp;
+      L.hip.rotation.z = (0.62 * sw + 0.05) * amp;
+      L.knee.rotation.z = -1.5 * Math.max(0, cs) * amp;
+      L.fet.rotation.z = (Math.max(0, cs) * 0.9 - Math.max(0, -sw) * 0.5) * amp; // 着地で沈み、振り出しで巻き込む
     } else {
-      L.hip.rotation.z = (0.5 * Math.sin(p) - 0.12) * amp;
+      L.hip.rotation.z = (0.5 * sw - 0.12) * amp;
       L.knee.rotation.z = (0.9 * Math.max(0, Math.cos(p + 0.4)) - 0.25) * amp;
+      L.fet.rotation.z = (-Math.max(0, cs) * 0.7 + Math.max(0, -sw) * 0.4) * amp;
     }
   }
   H.bodyG.position.y = 0.06 * Math.sin(ph * 1) * amp;
@@ -186,6 +215,7 @@ export function animateHorse(H, stride, v, t) {
   // 騎手は上下動を吸収
   H.jock.position.y = 1.68 - H.bodyG.position.y * 0.7;
   H.jock.rotation.z = -H.bodyG.rotation.z * 0.8;
-  H.mane.scale.y = 1 + 0.25 * Math.sin(t * 22);
+  H.mane.rotation.z = 0.04 * Math.sin(t * 22) * amp;
+  H.mane.position.y = 0.01 * Math.sin(t * 17);
   return ph;
 }

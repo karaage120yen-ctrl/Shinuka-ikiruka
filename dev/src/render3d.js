@@ -1,20 +1,23 @@
 // ===== 3Dの競馬場とレース描画（騎手の一人称視点） =====
 import * as THREE from 'three';
-import { TRACK, trackPos } from './sim.js';
+import { TRACK, trackPos, elev } from './sim.js';
 import { COAT } from './data.js';
 import { buildHorse, animateHorse } from './model.js';
-import { turfTex, dirtTex, grassTex, crowdTex, standingCrowdTex, buildingTex, textTex, blobTex } from './textures.js';
+import { turfTex, dirtTex, grassTex, crowdTex, standingCrowdTex, buildingTex, textTex, blobTex, setMirror } from './textures.js';
 
-const { Ls, R, P, width: W } = TRACK;
+const W = TRACK.width;
 const tmp = {};
 
-function loopStrip(d0, d1, y0, y1, step, uvScaleU = 10, uvAcross = 1) {
+// コースに沿った帯（坂の高さもつける）
+function loopStrip(d0, d1, y0, y1, step, uvScaleU = 10, uvAcross = 1, lift = true) {
+  const P = TRACK.P;
   const pos = [], uv = [], idx = [];
   const n = Math.ceil(P / step);
   for (let i = 0; i <= n; i++) {
     const u = (i / n) * P;
     const a = trackPos(u, d0, {}), b = trackPos(u, d1, {});
-    pos.push(a.x, y0, a.z, b.x, y1, b.z);
+    const e = lift ? a.y : 0;
+    pos.push(a.x, y0 + e, a.z, b.x, y1 + e, b.z);
     uv.push(u / uvScaleU, 0, u / uvScaleU, uvAcross);
     if (i < n) { const k = i * 2; idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
   }
@@ -24,22 +27,43 @@ function loopStrip(d0, d1, y0, y1, step, uvScaleU = 10, uvAcross = 1) {
   geo.setIndex(idx); geo.computeVertexNormals();
   return geo;
 }
+// 坂の下の土手（地面まで）
+function skirt(d) {
+  const P = TRACK.P, pos = [], idx = [];
+  const n = Math.ceil(P / 4);
+  for (let i = 0; i <= n; i++) {
+    const a = trackPos((i / n) * P, d, {});
+    pos.push(a.x, -0.05, a.z, a.x, a.y + 0.005, a.z);
+    if (i < n) { const k = i * 2; idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
+  return g;
+}
 
-function skyMesh(sunDir) {
+function skyMesh(sunDir, sky) {
   const mat = new THREE.ShaderMaterial({
     side: THREE.BackSide, depthWrite: false, fog: false,
-    uniforms: { sunDir: { value: sunDir.clone().normalize() } },
+    uniforms: { sunDir: { value: sunDir.clone().normalize() }, cloud: { value: sky.cloud }, night: { value: sky.night }, dark: { value: sky.dark } },
     vertexShader: `varying vec3 vDir; void main(){ vDir = normalize(position); vec4 p = modelViewMatrix*vec4(position,1.0); gl_Position = projectionMatrix*p; gl_Position.z = gl_Position.w; }`,
-    fragmentShader: `uniform vec3 sunDir; varying vec3 vDir;
+    fragmentShader: `uniform vec3 sunDir; uniform float cloud; uniform float night; uniform float dark; varying vec3 vDir;
+      float h21(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
       void main(){ float h = clamp(vDir.y, -0.1, 1.0);
         vec3 zen = vec3(0.16,0.38,0.78); vec3 hor = vec3(0.74,0.84,0.93);
         vec3 c = mix(hor, zen, pow(max(h,0.0), 0.55));
         float s = max(dot(normalize(vDir), sunDir), 0.0);
-        c += vec3(1.0,0.9,0.7) * (pow(s, 400.0)*4.0 + pow(s, 12.0)*0.25);
-        // 雲
+        c += vec3(1.0,0.9,0.7) * (pow(s, 400.0)*4.0 + pow(s, 12.0)*0.25) * (1.0 - cloud);
         float cl = sin(vDir.x*9.0+vDir.z*3.0)*sin(vDir.z*11.0-vDir.x*4.0)*0.5+0.5;
-        cl = smoothstep(0.55, 0.95, cl) * smoothstep(0.02, 0.25, h) * (1.0 - smoothstep(0.35,0.7,h));
+        cl = smoothstep(0.55 - cloud*0.5, 0.95, cl) * smoothstep(0.02, 0.25, h) * (1.0 - smoothstep(0.35 + cloud*0.6,0.7 + cloud*0.3,h));
         c = mix(c, vec3(0.97,0.98,1.0), cl*0.75);
+        c = mix(c, vec3(0.55,0.58,0.62), cloud*0.8);
+        c *= 1.0 - dark;
+        // 夜空
+        vec3 nc = mix(vec3(0.05,0.07,0.16), vec3(0.01,0.02,0.06), pow(max(h,0.0),0.4));
+        nc += vec3(0.25,0.18,0.10) * (1.0 - smoothstep(0.0, 0.15, h));
+        vec2 g = floor(vDir.xz/(0.2+vDir.y) * 220.0);
+        float st = step(0.997, h21(g)) * smoothstep(0.1, 0.4, h);
+        nc += vec3(st);
+        c = mix(c, nc, night);
         gl_FragColor = vec4(c, 1.0);
         #include <colorspace_fragment>
       }`,
@@ -53,6 +77,9 @@ export class RaceView {
   constructor(canvas, race, opts = {}) {
     this.race = race; this.opts = opts;
     this.view = opts.view || 'fp';
+    this.mirror = TRACK.dir === -1; // 右回りは画面を左右反転して見せる
+    setMirror(this.mirror);
+    canvas.style.transform = this.mirror ? 'scaleX(-1)' : '';
     const lowPower = opts.lowPower;
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: !lowPower, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, lowPower ? 1 : 1.6));
@@ -62,13 +89,17 @@ export class RaceView {
     this.renderer.shadowMap.enabled = !lowPower;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.Fog(0xb9cde0, 120, 1500);
+    const w = race.weather || '晴', night = TRACK.stand === 'night';
+    this.night = night; this.wx = w;
+    const fogC = night ? 0x0b1020 : w === '雨' ? 0x8f969e : w === '小雨' || w === '曇' ? 0xa9b2bb : w === '雪' ? 0xd5dbe2 : 0xb9cde0;
+    this.scene.fog = new THREE.Fog(fogC, night ? 80 : 100, w === '雨' || w === '雪' ? 700 : 1500);
     this.camera = new THREE.PerspectiveCamera(72, 1, 0.05, 6000);
     this.camera.rotation.order = 'YXZ';
     this.t = 0; this.shake = 0; this.whipAnim = 0;
     this.buildWorld();
     this.buildHorses();
     this.particles();
+    this.weatherFx();
     this.resize();
     this._onResize = () => this.resize();
     window.addEventListener('resize', this._onResize);
@@ -84,12 +115,15 @@ export class RaceView {
   }
 
   buildWorld() {
-    const S = this.scene;
+    const S = this.scene, { Ls, R, P } = TRACK, wx = this.wx, night = this.night;
+    const wet = ['小雨', '雨'].includes(wx) || this.race.going === '重' || this.race.going === '不良';
+    const cloudy = wx === '晴' ? 0 : wx === '曇' ? 0.45 : wx === '小雨' ? 0.7 : 1;
     const sunDir = new THREE.Vector3(-0.45, 0.62, 0.35).normalize();
     this.sunDir = sunDir;
-    S.add(this.sky = skyMesh(sunDir));
-    S.add(new THREE.HemisphereLight(0xd6e8ff, 0x52602f, 0.75));
-    const sun = new THREE.DirectionalLight(0xfff0d8, 2.6);
+    S.add(this.sky = skyMesh(sunDir, { cloud: cloudy, night: night ? 1 : 0, dark: wx === '雨' ? 0.25 : 0 }));
+    const hemiI = night ? 0.22 : 0.75 - cloudy * 0.15;
+    S.add(new THREE.HemisphereLight(night ? 0x8090c0 : 0xd6e8ff, 0x52602f, hemiI));
+    const sun = new THREE.DirectionalLight(night ? 0xdfe6ff : 0xfff0d8, night ? 0.9 : 2.6 * (1 - cloudy * 0.6));
     sun.castShadow = true;
     sun.shadow.mapSize.set(1024, 1024);
     const sc = sun.shadow.camera; sc.left = -28; sc.right = 28; sc.top = 28; sc.bottom = -28; sc.near = 1; sc.far = 220;
@@ -98,18 +132,23 @@ export class RaceView {
 
     // 地面
     const gt = grassTex(); gt.repeat.set(600, 600);
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(5000, 5000), new THREE.MeshStandardMaterial({ map: gt, roughness: 0.95 }));
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(5000, 5000), new THREE.MeshStandardMaterial({ map: gt, roughness: 0.95, color: TRACK.abroad === 'ドバイ' || TRACK.abroad === 'サウジアラビア' ? 0xd8c090 : 0xffffff }));
     ground.rotation.x = -Math.PI / 2; ground.position.y = -0.02; ground.receiveShadow = true; S.add(ground);
 
     const isTurf = this.race.surf !== 'ダ';
-    // メインのコース
+    const tint = wet ? 0x9aa08a : wx === '雪' ? 0xf0f4f8 : 0xffffff;
     const tt = isTurf ? turfTex() : dirtTex();
-    const main = new THREE.Mesh(loopStrip(-1.5, W + 1.2, 0.01, 0.01, 2, 13, 2.1), new THREE.MeshStandardMaterial({ map: tt, roughness: isTurf ? 0.85 : 1 }));
+    const main = new THREE.Mesh(loopStrip(-1.5, W + 1.2, 0.01, 0.01, 2, 13, 2.1), new THREE.MeshStandardMaterial({ map: tt, color: isTurf ? tint : (wet ? 0x7a6a5a : tint), roughness: wet ? 0.45 : isTurf ? 0.85 : 1, metalness: wet ? 0.1 : 0 }));
     main.receiveShadow = true; S.add(main);
-    // 内側のもう一つのコース（芝なら内にダート、ダートなら外に芝があるイメージ）
     const it = isTurf ? dirtTex() : turfTex();
     const inner = new THREE.Mesh(loopStrip(-26, -4, 0.008, 0.008, 3, 13, 1.7), new THREE.MeshStandardMaterial({ map: it, roughness: 1 }));
     inner.receiveShadow = true; S.add(inner);
+    if (TRACK.base || elev(0) || elev(TRACK.P / 2)) {
+      const grassM = new THREE.MeshStandardMaterial({ color: 0x4a7a32, roughness: 1, side: THREE.DoubleSide });
+      S.add(new THREE.Mesh(skirt(-27), grassM), new THREE.Mesh(skirt(W + 3.2), grassM));
+      S.add(new THREE.Mesh(loopStrip(-4, -1.5, 0.009, 0.009, 3, 13, 1), grassM));
+      S.add(new THREE.Mesh(loopStrip(W + 1.2, W + 3.2, 0.006, 0.006, 3, 13, 1), grassM));
+    }
 
     // ラチ（柵）
     const white = new THREE.MeshStandardMaterial({ color: 0xf4f4f4, roughness: 0.35, side: THREE.DoubleSide });
@@ -119,17 +158,17 @@ export class RaceView {
       const n = Math.floor(P / 3.2);
       const post = new THREE.InstancedMesh(new THREE.BoxGeometry(0.07, h, 0.07), white, n);
       const m = new THREE.Matrix4();
-      for (let i = 0; i < n; i++) { trackPos(i * 3.2, d, tmp); m.makeTranslation(tmp.x, h / 2, tmp.z); post.setMatrixAt(i, m); }
+      for (let i = 0; i < n; i++) { trackPos(i * 3.2, d, tmp); m.makeTranslation(tmp.x, tmp.y + h / 2, tmp.z); post.setMatrixAt(i, m); }
       S.add(post);
     };
     rail(-0.15, 1.05); rail(W + 0.4, 1.05); rail(-4, 1.0); rail(-26, 0.9);
-    // 外側の植え込み
     const hedge = new THREE.MeshStandardMaterial({ color: 0x2f5a26, roughness: 1, side: THREE.DoubleSide });
     S.add(new THREE.Mesh(loopStrip(W + 2.6, W + 2.6, 0, 1.4, 4), hedge));
     S.add(new THREE.Mesh(loopStrip(W + 2.3, W + 2.9, 1.4, 1.4, 4), hedge));
 
-    // ハロン棒（残り距離の標識）
+    // ハロン棒
     for (let m = 200; m <= 3600; m += 200) {
+      if (m > P * 1.9) break;
       const u = TRACK.finishU - m;
       trackPos(u, -0.6, tmp);
       const grp = new THREE.Group();
@@ -139,7 +178,7 @@ export class RaceView {
         const sign = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 0.8), new THREE.MeshBasicMaterial({ map: textTex(String(m), { w: 256, h: 140, bg: '#ffffff', fg: '#d42a2a', border: '#d42a2a' }), side: THREE.DoubleSide }));
         sign.position.y = 3.1; sign.rotation.y = Math.atan2(-tmp.hz, tmp.hx) + Math.PI / 2; grp.add(sign);
       }
-      grp.position.set(tmp.x, 0, tmp.z); S.add(grp);
+      grp.position.set(tmp.x, tmp.y, tmp.z); S.add(grp);
     }
     // ゴール板
     trackPos(TRACK.finishU, -0.8, tmp);
@@ -149,91 +188,148 @@ export class RaceView {
     disk.rotation.x = Math.PI / 2; disk.position.y = 5.2; goal.add(disk);
     const dsk2 = new THREE.Mesh(new THREE.CircleGeometry(0.55, 24), new THREE.MeshBasicMaterial({ color: 0xd42a2a })); dsk2.position.set(0, 5.2, 0.05); goal.add(dsk2);
     const dsk3 = dsk2.clone(); dsk3.position.z = -0.05; dsk3.rotation.y = Math.PI; goal.add(dsk3);
-    goal.position.set(tmp.x, 0, tmp.z); S.add(goal);
-    // ゴールライン
+    goal.position.set(tmp.x, tmp.y, tmp.z); S.add(goal);
     const a = trackPos(TRACK.finishU, 0, {}), b = trackPos(TRACK.finishU, W, {});
     const line = new THREE.Mesh(new THREE.PlaneGeometry(0.25, W), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7 }));
-    line.rotation.x = -Math.PI / 2; line.position.set(a.x, 0.02, (a.z + b.z) / 2); S.add(line);
+    line.rotation.x = -Math.PI / 2; line.position.set(a.x, a.y + 0.03, (a.z + b.z) / 2); S.add(line);
 
-    // スタンド（ホームストレッチの外側）
+    // スタンド
+    const kind = TRACK.stand;
+    const big = kind === 'big' || kind === 'night' || kind === 'city';
+    const sy = trackPos(TRACK.finishU, W, {}).y;
     const zS = R + W + 14;
-    const x0 = -230, x1 = 260, len = x1 - x0, cx = (x0 + x1) / 2;
-    const apron = new THREE.Mesh(new THREE.PlaneGeometry(len + 40, 16), new THREE.MeshStandardMaterial({ color: 0x9a9a94, roughness: 1 }));
-    apron.rotation.x = -Math.PI / 2; apron.position.set(cx, 0.01, R + W + 6); apron.receiveShadow = true; S.add(apron);
-    const ct = crowdTex(); ct.repeat.set(len / 16, 3);
-    const seats = new THREE.Mesh(new THREE.PlaneGeometry(len, 46), new THREE.MeshStandardMaterial({ map: ct, roughness: 1 }));
-    seats.rotation.x = -Math.PI / 2 - 0.55; seats.position.set(cx, 11, zS + 19); S.add(seats);
-    const bt = buildingTex(); bt.repeat.set(len / 30, 1);
-    const bld = new THREE.Mesh(new THREE.BoxGeometry(len, 16, 20), [
-      new THREE.MeshStandardMaterial({ color: 0xcfd3d8 }), new THREE.MeshStandardMaterial({ color: 0xcfd3d8 }),
-      new THREE.MeshStandardMaterial({ color: 0xbfc4ca }), new THREE.MeshStandardMaterial({ color: 0xbfc4ca }),
-      new THREE.MeshStandardMaterial({ map: bt }), new THREE.MeshStandardMaterial({ color: 0xcfd3d8 })]);
-    bld.position.set(cx, 30, zS + 48); S.add(bld);
-    const roof = new THREE.Mesh(new THREE.BoxGeometry(len + 10, 1.2, 46), new THREE.MeshStandardMaterial({ color: 0xe8ecef, roughness: 0.4, metalness: 0.3 }));
-    roof.position.set(cx, 39, zS + 26); roof.rotation.x = 0.08; roof.castShadow = false; S.add(roof);
-    for (let x = x0 + 10; x < x1; x += 40) {
-      const col = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 30, 8), new THREE.MeshStandardMaterial({ color: 0xdddddd }));
-      col.position.set(x, 15, zS + 36); S.add(col);
+    const x0 = -Ls * (big ? 0.48 : 0.3), x1 = Ls * (big ? 0.52 : 0.42), len = x1 - x0, cx = (x0 + x1) / 2;
+    this.standX = [x0, x1];
+    if (kind !== 'none') {
+      const H = big ? 1 : 0.55;
+      const stand = new THREE.Group(); stand.position.y = sy; S.add(stand);
+      const apron = new THREE.Mesh(new THREE.PlaneGeometry(len + 40, 16), new THREE.MeshStandardMaterial({ color: 0x9a9a94, roughness: 1 }));
+      apron.rotation.x = -Math.PI / 2; apron.position.set(cx, 0.01, R + W + 6); apron.receiveShadow = true; stand.add(apron);
+      const ct = crowdTex(); ct.repeat.set(len / 16, 3);
+      const seats = new THREE.Mesh(new THREE.PlaneGeometry(len, 46 * H), new THREE.MeshStandardMaterial({ map: ct, roughness: 1, emissive: night ? 0x222222 : 0x000000 }));
+      seats.rotation.x = -Math.PI / 2 - 0.55; seats.position.set(cx, 11 * H, zS + 19 * H); stand.add(seats);
+      const bt = buildingTex(); bt.repeat.set(len / 30, 1);
+      const wallC = kind === 'paris' ? 0xe9dcc4 : 0xcfd3d8;
+      const bld = new THREE.Mesh(new THREE.BoxGeometry(len, 16 * H, 20 * H), [
+        new THREE.MeshStandardMaterial({ color: wallC }), new THREE.MeshStandardMaterial({ color: wallC }),
+        new THREE.MeshStandardMaterial({ color: wallC }), new THREE.MeshStandardMaterial({ color: wallC }),
+        new THREE.MeshStandardMaterial({ map: bt, emissive: night ? 0xffe0a0 : 0x000000, emissiveIntensity: night ? 0.35 : 0, emissiveMap: night ? bt : null }), new THREE.MeshStandardMaterial({ color: wallC })]);
+      bld.position.set(cx, 30 * H, zS + 48 * H); stand.add(bld);
+      const roof = new THREE.Mesh(new THREE.BoxGeometry(len + 10, 1.2, 46 * H), new THREE.MeshStandardMaterial({ color: kind === 'paris' ? 0x6b4a3a : 0xe8ecef, roughness: 0.4, metalness: 0.3 }));
+      roof.position.set(cx, 39 * H, zS + 26 * H); roof.rotation.x = 0.08; stand.add(roof);
+      for (let x = x0 + 10; x < x1; x += 40) {
+        const col = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 30 * H, 8), new THREE.MeshStandardMaterial({ color: 0xdddddd }));
+        col.position.set(x, 15 * H, zS + 36 * H); stand.add(col);
+      }
+      const sct = standingCrowdTex(); sct.repeat.set(len / 30, 1);
+      const crowdMat = new THREE.MeshStandardMaterial({ map: sct, transparent: true, alphaTest: 0.4, side: THREE.DoubleSide, roughness: 1, emissive: night ? 0x333333 : 0x000000 });
+      for (const [dz, s, y0] of [[R + W + 5.5, 2.1, 0.2], [R + W + 9, 2.3, 0.9], [R + W + 12.5, 2.5, 1.7]]) {
+        const cr = new THREE.Mesh(new THREE.PlaneGeometry(len, s), crowdMat);
+        cr.position.set(cx, y0 + s / 2, dz); stand.add(cr);
+        const step = new THREE.Mesh(new THREE.BoxGeometry(len, y0 + 0.01, 3.5), new THREE.MeshStandardMaterial({ color: 0x8d8d88 }));
+        step.position.set(cx, (y0 + 0.01) / 2, dz + 1.2); stand.add(step);
+      }
     }
-    // ラチ沿いの観客
-    const sct = standingCrowdTex(); sct.repeat.set(len / 30, 1);
-    const crowdMat = new THREE.MeshStandardMaterial({ map: sct, transparent: true, alphaTest: 0.4, side: THREE.DoubleSide, roughness: 1 });
-    for (const [dz, s, y0] of [[R + W + 5.5, 2.1, 0.2], [R + W + 9, 2.3, 0.9], [R + W + 12.5, 2.5, 1.7]]) {
-      const cr = new THREE.Mesh(new THREE.PlaneGeometry(len, s), crowdMat);
-      cr.position.set(cx, y0 + s / 2, dz); S.add(cr);
-      const step = new THREE.Mesh(new THREE.BoxGeometry(len, y0 + 0.01, 3.5), new THREE.MeshStandardMaterial({ color: 0x8d8d88 }));
-      step.position.set(cx, (y0 + 0.01) / 2, dz + 1.2); S.add(step);
+    // 夜のナイター照明
+    if (night) {
+      const poleM = new THREE.MeshStandardMaterial({ color: 0x666666 });
+      const lampM = new THREE.MeshBasicMaterial({ color: 0xfff6dd });
+      for (let i = 0; i < 16; i++) {
+        trackPos((i / 16) * P, i % 2 ? W + 12 : -34, tmp);
+        const pl = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.8, 40, 8), poleM); pl.position.set(tmp.x, 20, tmp.z); S.add(pl);
+        const lp = new THREE.Mesh(new THREE.BoxGeometry(6, 3, 1), lampM); lp.position.set(tmp.x, 41, tmp.z); lp.lookAt(0, 0, 0); S.add(lp);
+      }
+      this.flood = new THREE.PointLight(0xfff2d8, 2.2, 160, 1.2); S.add(this.flood);
     }
-
-    // ターフビジョン（場内の大型画面）
+    // ターフビジョン
     const tvGroup = new THREE.Group();
     const tvTex = textTex(this.opts.title || '死ぬか生きるかの戦い', { w: 1024, h: 256, bg: '#0b1a2e', fg: '#ffd34d', size: 110 });
     const tv = new THREE.Mesh(new THREE.PlaneGeometry(60, 15), new THREE.MeshBasicMaterial({ map: tvTex, toneMapped: false }));
     tv.position.y = 16; tvGroup.add(tv);
     const frame = new THREE.Mesh(new THREE.BoxGeometry(63, 18, 1.5), new THREE.MeshStandardMaterial({ color: 0x222222 })); frame.position.set(0, 16, -0.9); tvGroup.add(frame);
     for (const x of [-20, 20]) { const leg = new THREE.Mesh(new THREE.BoxGeometry(1.5, 8, 1.5), new THREE.MeshStandardMaterial({ color: 0x555555 })); leg.position.set(x, 4, -0.9); tvGroup.add(leg); }
-    tvGroup.position.set(60, 0, R - 70); S.add(tvGroup);
-    // 池
-    const pond = new THREE.Mesh(new THREE.CircleGeometry(40, 32), new THREE.MeshStandardMaterial({ color: 0x3a6f8f, roughness: 0.08, metalness: 0.4 }));
-    pond.rotation.x = -Math.PI / 2; pond.scale.set(2.2, 1, 1); pond.position.set(-60, 0.03, -20); S.add(pond);
-
+    tvGroup.position.set(Ls * 0.12, 0, R - 70); if (kind !== 'none') S.add(tvGroup);
+    if (TRACK.name === '東京' || kind === 'paris') {
+      const pond = new THREE.Mesh(new THREE.CircleGeometry(40, 32), new THREE.MeshStandardMaterial({ color: 0x3a6f8f, roughness: 0.08, metalness: 0.4 }));
+      pond.rotation.x = -Math.PI / 2; pond.scale.set(Math.min(2.2, Ls / 230), 1, 1); pond.position.set(-Ls * 0.12, 0.03, -20); S.add(pond);
+    }
     // 木
     const trunkG = new THREE.CylinderGeometry(0.3, 0.45, 4, 6); trunkG.translate(0, 2, 0);
     const leafG = new THREE.ConeGeometry(3.2, 9, 8); leafG.translate(0, 8, 0);
     const leafG2 = new THREE.SphereGeometry(3.6, 8, 6); leafG2.translate(0, 6.5, 0);
     const trees = [];
-    for (let i = 0; i < 520; i++) {
+    const desert = TRACK.abroad === 'ドバイ' || TRACK.abroad === 'サウジアラビア';
+    const nTree = desert ? 120 : kind === 'paris' ? 800 : 520;
+    for (let i = 0; i < nTree; i++) {
       const u = Math.random() * P;
       const d = W + 14 + Math.random() * 160;
       trackPos(u, d, tmp);
-      if (tmp.z > R && tmp.x > x0 - 30 && tmp.x < x1 + 30) continue; // スタンドの所はなし
-      trees.push([tmp.x, tmp.z, 0.7 + Math.random() * 0.8, Math.random() < 0.5]);
+      if (tmp.z > R && tmp.x > x0 - 30 && tmp.x < x1 + 30) continue;
+      trees.push([tmp.x, tmp.z, 0.7 + Math.random() * 0.8, desert ? 2 : Math.random() < 0.5 ? 1 : 0]);
     }
     for (let i = 0; i < 60; i++) {
       const x = (Math.random() - 0.5) * (Ls + 60), z = (Math.random() - 0.5) * (R * 1.2);
-      if (Math.abs(x - 60) < 50 && z > R - 100) continue;
-      if (Math.hypot((x + 60) / 2.2, z + 20) < 45) continue;
-      trees.push([x, z, 0.5 + Math.random() * 0.6, true]);
+      if (Math.abs(x - Ls * 0.12) < 50 && z > R - 100) continue;
+      if (Math.hypot((x + Ls * 0.12) / 2.2, z + 20) < 45) continue;
+      trees.push([x, z, 0.5 + Math.random() * 0.6, desert ? 2 : 1]);
     }
     const trunkM = new THREE.InstancedMesh(trunkG, new THREE.MeshStandardMaterial({ color: 0x4a3524 }), trees.length);
-    const coneT = trees.filter(t => !t[3]), roundT = trees.filter(t => t[3]);
-    const coneM = new THREE.InstancedMesh(leafG, new THREE.MeshStandardMaterial({ color: 0x24502a, roughness: 1 }), coneT.length);
-    const roundM = new THREE.InstancedMesh(leafG2, new THREE.MeshStandardMaterial({ color: 0x3d6e2e, roughness: 1 }), roundT.length);
+    const coneT = trees.filter(t => t[3] === 0), roundT = trees.filter(t => t[3] === 1), palmT = trees.filter(t => t[3] === 2);
+    const coneM = new THREE.InstancedMesh(leafG, new THREE.MeshStandardMaterial({ color: 0x24502a, roughness: 1 }), Math.max(1, coneT.length));
+    const roundM = new THREE.InstancedMesh(leafG2, new THREE.MeshStandardMaterial({ color: wx === '雪' ? 0xdfe8e0 : 0x3d6e2e, roughness: 1 }), Math.max(1, roundT.length));
+    const palmG = new THREE.ConeGeometry(4, 2.5, 7); palmG.translate(0, 9, 0);
+    const palmM = new THREE.InstancedMesh(palmG, new THREE.MeshStandardMaterial({ color: 0x4f7a2a, roughness: 1 }), Math.max(1, palmT.length));
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sv = new THREE.Vector3();
-    trees.forEach((t, i) => { sv.setScalar(t[2]); m.compose(new THREE.Vector3(t[0], 0, t[1]), q, sv); trunkM.setMatrixAt(i, m); });
+    trees.forEach((t, i) => { sv.set(t[2], t[2] * (t[3] === 2 ? 2.2 : 1), t[2]); m.compose(new THREE.Vector3(t[0], 0, t[1]), q, sv); trunkM.setMatrixAt(i, m); });
     coneT.forEach((t, i) => { sv.setScalar(t[2]); m.compose(new THREE.Vector3(t[0], 0, t[1]), q, sv); coneM.setMatrixAt(i, m); });
     roundT.forEach((t, i) => { sv.set(t[2], t[2] * (0.8 + Math.random() * 0.4), t[2]); m.compose(new THREE.Vector3(t[0], 0, t[1]), q, sv); roundM.setMatrixAt(i, m); });
-    S.add(trunkM, coneM, roundM);
-    // 遠くの山
-    const mtMat = new THREE.MeshStandardMaterial({ color: 0x6e8aa0, roughness: 1, flatShading: true });
+    palmT.forEach((t, i) => { sv.setScalar(t[2]); m.compose(new THREE.Vector3(t[0], 0, t[1]), q, sv); palmM.setMatrixAt(i, m); });
+    if (!coneT.length) coneM.count = 0; if (!roundT.length) roundM.count = 0; if (!palmT.length) palmM.count = 0;
+    S.add(trunkM, coneM, roundM, palmM);
+    // 遠くの山・街
+    const mtMat = new THREE.MeshStandardMaterial({ color: kind === 'city' ? 0x4f7a5a : desert ? 0xc8a878 : 0x6e8aa0, roughness: 1, flatShading: true });
     for (let i = 0; i < 14; i++) {
       const ang = (i / 14) * Math.PI * 2 + Math.random() * 0.2;
       const dist = 1700 + Math.random() * 600;
-      const mt = new THREE.Mesh(new THREE.ConeGeometry(300 + Math.random() * 300, 160 + Math.random() * 220, 7), mtMat);
+      const mt = new THREE.Mesh(new THREE.ConeGeometry(300 + Math.random() * 300, (desert ? 40 : 160) + Math.random() * (kind === 'city' ? 420 : 220), 7), mtMat);
       mt.position.set(Math.cos(ang) * dist, 60, Math.sin(ang) * dist); S.add(mt);
     }
-    // スタートゲート
+    if (kind === 'city' || kind === 'night') {
+      const bm = new THREE.MeshStandardMaterial({ color: 0x9aa4ae, roughness: 0.4, metalness: 0.4, emissive: night ? 0x334466 : 0x000000 });
+      const box = new THREE.BoxGeometry(1, 1, 1); box.translate(0, 0.5, 0);
+      const n = 90, im = new THREE.InstancedMesh(box, bm, n);
+      for (let i = 0; i < n; i++) {
+        const ang = Math.random() * Math.PI * 2, dist = 600 + Math.random() * 700;
+        m.compose(new THREE.Vector3(Math.cos(ang) * dist, 0, Math.sin(ang) * dist), q, sv.set(20 + Math.random() * 30, 40 + Math.random() * (kind === 'city' ? 220 : 120), 20 + Math.random() * 30));
+        im.setMatrixAt(i, m);
+      }
+      S.add(im);
+    }
+    if (kind === 'paris') {
+      // ロンシャンの風車
+      const wm = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(4, 6, 18, 12), new THREE.MeshStandardMaterial({ color: 0xe9e2d0 })); body.position.y = 9; wm.add(body);
+      const cap = new THREE.Mesh(new THREE.ConeGeometry(5, 5, 12), new THREE.MeshStandardMaterial({ color: 0x5a3a2a })); cap.position.y = 20.5; wm.add(cap);
+      const blades = new THREE.Group(); blades.position.set(0, 18, 5.5); wm.add(blades);
+      for (let k = 0; k < 4; k++) { const bl = new THREE.Mesh(new THREE.BoxGeometry(1.6, 14, 0.3), new THREE.MeshStandardMaterial({ color: 0x8a6a4a })); bl.position.y = 7; const g2 = new THREE.Group(); g2.rotation.z = k * Math.PI / 2; g2.add(bl); blades.add(g2); }
+      this.windmill = blades;
+      trackPos(TRACK.P * 0.55, -60, tmp); wm.position.set(tmp.x, 0, tmp.z); S.add(wm);
+    }
     this.buildGate();
+  }
+
+  // 雨・雪の粒
+  weatherFx() {
+    const wx = this.wx;
+    if (!['小雨', '雨', '雪'].includes(wx)) return;
+    const N = wx === '雨' ? 2600 : wx === '小雨' ? 1200 : 1500;
+    const pos = new Float32Array(N * 3);
+    for (let i = 0; i < N; i++) { pos[i * 3] = (Math.random() - 0.5) * 80; pos[i * 3 + 1] = Math.random() * 30; pos[i * 3 + 2] = (Math.random() - 0.5) * 80; }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const snow = wx === '雪';
+    const mat = new THREE.PointsMaterial({ color: snow ? 0xffffff : 0xdfe8f6, size: snow ? 0.12 : 0.09, transparent: true, opacity: snow ? 0.95 : 0.85, sizeAttenuation: true, depthWrite: false });
+    this.rain = new THREE.Points(g, mat); this.rain.frustumCulled = false; this.rainSpeed = snow ? 2.2 : 18;
+    this.scene.add(this.rain);
   }
 
   buildGate() {
@@ -243,19 +339,19 @@ export class RaceView {
     const green = new THREE.MeshStandardMaterial({ color: 0x2f7a3a, roughness: 0.6 });
     const grey = new THREE.MeshStandardMaterial({ color: 0xcfcfcf, roughness: 0.5 });
     trackPos(race.u0 + 1.6, 0, tmp);
-    const ang = Math.atan2(-tmp.hz, tmp.hx);
+    const ang = Math.atan2(-tmp.hz, tmp.hx), gy = tmp.y;
     for (let i = 0; i <= n; i++) {
       const d = 0.5 + i * 1.25;
       const p = trackPos(race.u0 + 1.6, d, {});
       const post = new THREE.Mesh(new THREE.BoxGeometry(2.6, 2.4, 0.08), green);
-      post.position.set(p.x, 1.2, p.z); post.rotation.y = ang; g.add(post);
+      post.position.set(p.x, gy + 1.2, p.z); post.rotation.y = ang; g.add(post);
     }
     const a = trackPos(race.u0 + 1.6, 0.5, {}), b = trackPos(race.u0 + 1.6, 0.5 + n * 1.25, {});
     const beam = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.6, n * 1.25 + 0.4), grey);
-    beam.position.set((a.x + b.x) / 2, 2.7, (a.z + b.z) / 2); beam.rotation.y = ang; g.add(beam);
+    beam.position.set((a.x + b.x) / 2, gy + 2.7, (a.z + b.z) / 2); beam.rotation.y = ang; g.add(beam);
     const tt = textTex('死ぬか生きるかの戦い', { w: 1024, h: 96, bg: '#2f7a3a', fg: '#ffffff', size: 60 });
     const label = new THREE.Mesh(new THREE.PlaneGeometry(n * 1.25, 0.5), new THREE.MeshBasicMaterial({ map: tt, side: THREE.DoubleSide }));
-    label.position.set((a.x + b.x) / 2, 2.7, (a.z + b.z) / 2); label.rotation.y = ang - Math.PI / 2;
+    label.position.set((a.x + b.x) / 2, gy + 2.7, (a.z + b.z) / 2); label.rotation.y = ang - Math.PI / 2;
     label.position.x -= Math.cos(ang) * 0.27; label.position.z += Math.sin(ang) * 0.27;
     g.add(label);
     this.scene.add(g); this.gate = g;
@@ -337,7 +433,7 @@ export class RaceView {
       const lat = (r.d - (H.lastD ?? r.d)) / Math.max(dt, 1e-3);
       H.lastD = r.d;
       H.yaw = (H.yaw ?? 0) * 0.85 + (-Math.atan2(lat, Math.max(r.v, 3))) * 0.15;
-      H.root.position.set(p.x, 0, p.z);
+      H.root.position.set(p.x, p.y || 0, p.z);
       H.root.rotation.y = ang + H.yaw;
       const ph = animateHorse(H, r.stride, r.v, this.t);
       // 蹄の跡（土や芝が飛ぶ）
@@ -346,7 +442,7 @@ export class RaceView {
         if (step !== H.lastStep) {
           H.lastStep = step;
           const cnt = this.race.surf === 'ダ' ? 6 : 3;
-          for (let k = 0; k < cnt; k++) this.emit(p.x - p.hx * (0.5 + Math.random()), 0.08, p.z - p.hz * (0.5 + Math.random()), -p.hx * r.v * 0.15, -p.hz * r.v * 0.15);
+          for (let k = 0; k < cnt; k++) this.emit(p.x - p.hx * (0.5 + Math.random()), (p.y || 0) + 0.08, p.z - p.hz * (0.5 + Math.random()), -p.hx * r.v * 0.15, -p.hz * r.v * 0.15);
         }
       }
     }
@@ -355,7 +451,7 @@ export class RaceView {
       if (this.pLife[i] <= 0) { this.pPos[i * 3 + 1] = -10; continue; }
       this.pLife[i] -= dt;
       this.pVel[i * 3 + 1] -= 9.8 * dt;
-      this.pPos[i * 3] += this.pVel[i * 3] * dt; this.pPos[i * 3 + 1] = Math.max(0.01, this.pPos[i * 3 + 1] + this.pVel[i * 3 + 1] * dt); this.pPos[i * 3 + 2] += this.pVel[i * 3 + 2] * dt;
+      this.pPos[i * 3] += this.pVel[i * 3] * dt; this.pPos[i * 3 + 1] = Math.max(-1, this.pPos[i * 3 + 1] + this.pVel[i * 3 + 1] * dt); this.pPos[i * 3 + 2] += this.pVel[i * 3 + 2] * dt;
     }
     this.pts.geometry.attributes.position.needsUpdate = true;
 
@@ -399,27 +495,38 @@ export class RaceView {
         let target;
         if (this.view === 'tv') {
           const q = trackPos(r.u + 2, r.d + 22, {});
-          camPos.set(q.x, 7, q.z);
-          target = new THREE.Vector3(p.x, 1.4, p.z);
+          camPos.set(q.x, (q.y || 0) + 7, q.z);
+          target = new THREE.Vector3(p.x, (p.y || 0) + 1.4, p.z);
         } else {
-          camPos.set(p.x - p.hx * back + p.nx * 1.5, 4.2, p.z - p.hz * back + p.nz * 1.5);
-          target = new THREE.Vector3(p.x + p.hx * 8, 1.4, p.z + p.hz * 8);
+          camPos.set(p.x - p.hx * back + p.nx * 1.5, (p.y || 0) + 4.2, p.z - p.hz * back + p.nz * 1.5);
+          target = new THREE.Vector3(p.x + p.hx * 8, (p.y || 0) + 1.4, p.z + p.hz * 8);
         }
         this.camera.position.lerp(camPos, 1 - Math.exp(-dt * 10));
         this.camera.lookAt(target);
       }
-      const pp = trackPos(r.u, r.d, {});
-      this.sun.position.set(pp.x + this.sunDir.x * 100, this.sunDir.y * 100, pp.z + this.sunDir.z * 100);
-      this.sun.target.position.set(pp.x, 0, pp.z);
+      const pp = trackPos(r.u, r.d, {}); const p0y = pp.y;
+      this.sun.position.set(pp.x + this.sunDir.x * 100, (pp.y || 0) + this.sunDir.y * 100, pp.z + this.sunDir.z * 100);
+      this.sun.target.position.set(pp.x, pp.y || 0, pp.z);
       this.sun.target.updateMatrixWorld();
       this.camera.getWorldPosition(camPos);
       this.sky.position.copy(camPos);
+      if (this.flood) this.flood.position.set(camPos.x, camPos.y + 30, camPos.z);
+      if (this.windmill) this.windmill.rotation.z += dt * 0.4;
+      if (this.rain) {
+        const a = this.rain.geometry.attributes.position, arr = a.array, sp = this.rainSpeed;
+        for (let i = 0; i < arr.length; i += 3) {
+          arr[i + 1] -= sp * dt; if (this.wx === '雪') arr[i] += Math.sin(this.t + i) * dt * 0.5;
+          if (arr[i + 1] < 0) { arr[i + 1] = 30; arr[i] = (Math.random() - 0.5) * 80; arr[i + 2] = (Math.random() - 0.5) * 80; }
+        }
+        a.needsUpdate = true; this.rain.position.set(camPos.x, (p0y || 0) - 2, camPos.z);
+      }
     }
   }
 
   render() { this.renderer.render(this.scene, this.camera); }
 
   dispose() {
+    this.renderer.domElement.style.transform = ''; setMirror(false);
     window.removeEventListener('resize', this._onResize);
     this.scene.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) { const ms = Array.isArray(o.material) ? o.material : [o.material]; ms.forEach(m => { if (m.map) m.map.dispose(); m.dispose(); }); } });
     this.renderer.dispose();

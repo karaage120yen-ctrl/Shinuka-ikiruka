@@ -1,6 +1,8 @@
 // ===== 画像を使わずに作るテクスチャ =====
 import * as THREE from 'three';
 
+let MIRROR = false;
+export function setMirror(v) { MIRROR = !!v; }
 function canvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
 function tex(c, rx = 1, ry = 1) {
   const t = new THREE.CanvasTexture(c);
@@ -97,6 +99,7 @@ export function buildingTex() {
 export function textTex(text, opts = {}) {
   const w = opts.w || 512, h = opts.h || 128;
   const c = canvas(w, h), x = c.getContext('2d');
+  if (MIRROR) { x.translate(w, 0); x.scale(-1, 1); }
   x.fillStyle = opts.bg || '#ffffff'; x.fillRect(0, 0, w, h);
   if (opts.border) { x.strokeStyle = opts.border; x.lineWidth = 10; x.strokeRect(5, 5, w - 10, h - 10); }
   x.fillStyle = opts.fg || '#111';
@@ -110,6 +113,7 @@ export function textTex(text, opts = {}) {
 // ゼッケン
 export function clothTex(num, color) {
   const c = canvas(128, 96), x = c.getContext('2d');
+  if (MIRROR) { x.translate(128, 0); x.scale(-1, 1); }
   x.fillStyle = color; x.fillRect(0, 0, 128, 96);
   x.fillStyle = '#fff'; x.fillRect(30, 14, 68, 68);
   x.fillStyle = '#111'; x.font = 'bold 54px sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';

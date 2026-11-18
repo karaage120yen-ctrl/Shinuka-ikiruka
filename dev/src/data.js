@@ -116,6 +116,17 @@ export const GRADED = [
   { m: 12, name: '有馬記念', g: 'G1', age: '3+', surf: '芝', dist: 2500, place: '中山', prize: 50000 },
 ];
 
+// 海外の大レース（G1を勝つか重賞を3勝すると招待される）
+export const OVERSEAS = [
+  { m: 2, name: 'サウジカップ', g: 'G1', age: '4+', surf: 'ダ', dist: 1800, place: 'リヤド', prize: 140000, abroad: 'サウジアラビア' },
+  { m: 3, name: 'ドバイワールドカップ', g: 'G1', age: '4+', surf: 'ダ', dist: 2000, place: 'メイダン', prize: 100000, abroad: 'ドバイ' },
+  { m: 3, name: 'ドバイシーマクラシック', g: 'G1', age: '4+', surf: '芝', dist: 2400, place: 'メイダン', prize: 50000, abroad: 'ドバイ' },
+  { m: 7, name: 'キングジョージ6世&QES', g: 'G1', age: '3+', surf: '芝', dist: 2400, place: 'アスコット', prize: 25000, abroad: 'イギリス' },
+  { m: 10, name: '凱旋門賞', g: 'G1', age: '3+', surf: '芝', dist: 2400, place: 'ロンシャン', prize: 45000, abroad: 'フランス' },
+  { m: 12, name: '香港カップ', g: 'G1', age: '3+', surf: '芝', dist: 2000, place: 'シャティン', prize: 35000, abroad: '香港' },
+  { m: 12, name: '香港ヴァーズ', g: 'G1', age: '3+', surf: '芝', dist: 2400, place: 'シャティン', prize: 20000, abroad: '香港' },
+];
+
 export const CLASS_INFO = [
   { name: '新馬', prize: 700, lv: 24 },
   { name: '未勝利', prize: 550, lv: 27 },

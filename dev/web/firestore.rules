@@ -1,0 +1,43 @@
+rules_version = '2';
+// Firestore のルール（Firebase コンソールの Firestore →「ルール」に全部貼って「公開」）
+// 「死ぬか生きるかの戦い」と「サッカーやるよん」の両方が入っているので、同じプロジェクトで両方使える。
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===== 死ぬか生きるかの戦い =====
+    // セーブデータ：本人だけ
+    match /kb_users/{uid}/{docId} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+    // 賭けのルーム：ログインしている人なら読める。「一緒に見る」の合図は誰でも書ける
+    match /kb_rooms/{code} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.resource.data.size() < 20;
+      // ルームのメンバー：自分の行だけ書ける
+      match /members/{uid} {
+        allow read: if request.auth != null;
+        allow write: if request.auth != null && request.auth.uid == uid;
+      }
+    }
+
+    // ===== サッカーやるよん =====
+    match /data/users/{uid}/{docId} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+    match /rooms/{code} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+                    && request.resource.data.host.uid == request.auth.uid
+                    && request.resource.data.status == 'wait';
+      allow update: if request.auth != null
+                    && (resource.data.status == 'wait'
+                        || request.time.toMillis() > resource.data.t + 10800000);
+      allow delete: if request.auth != null && resource.data.host.uid == request.auth.uid;
+    }
+    match /{coll}/{uid} {
+      allow read: if request.auth != null && coll.matches('rank_.*');
+      allow write: if request.auth != null && request.auth.uid == uid && coll.matches('rank_.*')
+                   && request.resource.data.pts is int && request.resource.data.pts <= 2000;
+    }
+  }
+}

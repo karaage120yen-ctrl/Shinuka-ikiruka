@@ -2,9 +2,12 @@
 import { COAT, SILKS, STYLES, COND_NAMES, fmtTime, rankColor } from './data.js';
 import { S, save, newId } from './store.js';
 import * as K from './career.js';
-import { simulateRace } from './sim.js';
+import { simulateRace, rollWeather } from './sim.js';
 import { startRace } from './racescreen.js';
 import { NPC_JOCKEY } from './jockey.js';
+import { playCuts } from './cut.js';
+import { NPC_SIRES, NPC_DAMS, makeFoal, preview, sexOf } from './breed.js';
+import { checkAch } from './ach.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const hex = (n) => '#' + (n ?? 0xffffff).toString(16).padStart(6, '0');
@@ -38,7 +41,7 @@ function pcard(p, mode = 'full') {
   let sub, tags, face;
   if (p.kind === 'horse') {
     sub = `${p.age}歳・${K.STAGE_NAME[st]}`;
-    tags = [p.style, G.n, `芝${p.apt.turf}・ダ${p.apt.dirt}`].map(t => `<span>${esc(t)}</span>`).join('');
+    tags = [p.sex || '', p.style, G.n, `芝${p.apt.turf}・ダ${p.apt.dirt}`].filter(Boolean).map(t => `<span>${esc(t)}</span>`).join('');
     face = `<div class="face" style="--c:${hex(COAT[p.coat].body)}">🐴</div>`;
   } else {
     const sb = K.stableOf(p);
@@ -89,6 +92,7 @@ function draw() {
   app.innerHTML = `${header(title)}<div class="page career">${tabs}${body}</div>${inC ? autoBtn(C) : ''}`;
   bindAll(C);
   window.scrollTo(0, C._keepScroll ? window.scrollY : 0); C._keepScroll = false;
+  if (C.cutq && C.cutq.length) { const q = C.cutq.splice(0); save(); if (!C.auto || (C.speed || 1) <= 2) playCuts(q); }
   if (C.auto) scheduleAuto(C);
 }
 
@@ -110,9 +114,10 @@ function drawDraft() {
   const lead = K.has(p, 'legend') ? '<b class="gold">10万頭に1頭の伝説が現れた。</b>限界がとても高い。' : K.has(p, 'monster') ? '<b class="gold">天才が見つかった。</b>並よりはるかに限界が高い。' : d.custom ? '条件を変えるたびに、能力は引き直される。' : H ? '牧場に新しい命が生まれた。この馬の一生を見守るか、別の馬を探すか。' : '競馬学校の入学試験に、新しい才能が現れた。この人の騎手人生を歩むか、別の人を探すか。';
   const custom = d.custom ? (H ? `
     <div class="card"><label>馬の名前（9文字まで）</label><input id="cname" maxlength="9" value="${esc(p.name)}">
-    <label>毛色</label><div class="chips">${COAT.map((c, i) => `<button class="chip ${i === p.coat ? 'on' : ''}" data-act="dset" data-k="coat" data-v="${i}"><i style="background:${hex(c.body)}"></i>${c.name}</button>`).join('')}</div>
-    <label>脚質</label><div class="chips">${STYLES.map(s => `<button class="chip ${s === p.style ? 'on' : ''}" data-act="dset" data-k="style" data-v="${s}">${s}</button>`).join('')}</div>
-    <label>成長タイプ</label><div class="chips">${Object.entries(G).map(([k, g]) => `<button class="chip ${k === p.growth ? 'on' : ''}" data-act="dset" data-k="growth" data-v="${k}">${g.n}</button>`).join('')}</div></div>`
+    ${d.bred ? '' : `<label>毛色</label><div class="chips">${COAT.map((c, i) => `<button class="chip ${i === p.coat ? 'on' : ''}" data-act="dset" data-k="coat" data-v="${i}"><i style="background:${hex(c.body)}"></i>${c.name}</button>`).join('')}</div>`}
+    <label>性別</label><div class="chips">${['牡', '牝'].map(x => `<button class="chip ${x === p.sex ? 'on' : ''}" data-act="dsex" data-v="${x}">${x === '牡' ? '牡（オス）' : '牝（メス）'}</button>`).join('')}</div>
+    ${d.bred ? '' : `<label>脚質</label><div class="chips">${STYLES.map(s => `<button class="chip ${s === p.style ? 'on' : ''}" data-act="dset" data-k="style" data-v="${s}">${s}</button>`).join('')}</div>`}
+    ${d.bred ? '' : `<label>成長タイプ</label><div class="chips">${Object.entries(G).map(([k, g]) => `<button class="chip ${k === p.growth ? 'on' : ''}" data-act="dset" data-k="growth" data-v="${k}">${g.n}</button>`).join('')}</div>`}</div>`
     : `<div class="card"><label>騎手の名前</label><input id="cname" maxlength="10" value="${esc(p.name)}">
     <label>勝負服の色</label><div class="chips">${SILKS.map((c, i) => `<button class="chip sw ${i === p.silk ? 'on' : ''}" data-act="dset" data-k="silk" data-v="${i}"><i style="background:${hex(c)}"></i></button>`).join('')}</div>
     <label>得意な戦法</label><div class="chips">${STYLES.map(s => `<button class="chip ${s === p.pref ? 'on' : ''}" data-act="dset" data-k="pref" data-v="${s}">${s}</button>`).join('')}</div>
@@ -124,27 +129,65 @@ function drawDraft() {
   app.innerHTML = `${header(H ? '馬の育成' : '騎手の育成')}<div class="page career">
     <div class="kick">${H ? '牧場レポート' : 'スカウトレポート'}<span class="r">No.${String(d.n).padStart(3, '0')}</span></div>
     <p class="note">${lead}</p>${pcard(p, 'preview')}${scout}${inh}
-    <div class="stack"><button class="btn red" data-act="dstart">${H ? 'この馬で始める' : 'この騎手で始める'}</button><button class="btn ghost" data-act="dreroll">${d.custom ? '能力を引き直す' : H ? '別の馬を探す' : '別の人を探す'}</button></div>
+    <div class="stack"><button class="btn red" data-act="dstart">${H ? 'この馬で始める' : 'この騎手で始める'}</button><button class="btn ghost" data-act="dreroll">${d.custom ? '能力を引き直す' : H ? '別の馬を探す' : '別の人を探す'}</button>
+    ${H ? `<button class="btn race" data-act="dbreed">🧬 配合して産ませる（父と母を選ぶ）</button>` : ''}</div>
+    ${d.bred ? `<p class="note">配合で生まれた仔。父${esc(p.sire)}・母${esc(p.dam)}${p.gen >= 2 ? `　自分の血統 ${p.gen}代目` : ''}</p>` : ''}
     <button class="linkbtn" data-act="dcustom">${d.custom ? 'おまかせに戻す' : H ? '名前や毛色を自分で決める' : '名前や勝負服を自分で決める'}</button>${custom}</div>`;
   const nm = () => { const el = document.getElementById('cname'); if (el) p.name = el.value.trim() || p.name; };
   const remake = (patch) => { nm(); const keep = { name: p.name, coat: p.coat, style: p.style, growth: p.growth, silk: p.silk, pref: p.pref, ...patch }; d.prev = H ? K.makeHorse(keep) : K.makeJockey(keep); drawDraft(); };
   app.querySelectorAll('[data-act]').forEach(el => el.onclick = () => {
     const a = el.dataset.act, v = el.dataset.v;
     if (a === 'home') return goHome();
-    if (a === 'dreroll') { if (d.custom) remake({}); else { d.prev = H ? K.makeHorse() : K.makeJockey(); d.n++; drawDraft(); } }
+    if (a === 'dreroll') { d.bred = false; if (d.custom) remake({}); else { d.prev = H ? K.makeHorse() : K.makeJockey(); d.n++; drawDraft(); } }
+    if (a === 'dsex') { nm(); p.sex = v; drawDraft(); }
+    if (a === 'dbreed') { nm(); return drawBreed(); }
     if (a === 'dcustom') { nm(); d.custom = !d.custom; drawDraft(); }
-    if (a === 'dset') { const k = el.dataset.k; remake({ [k]: ['coat', 'silk'].includes(k) ? +v : v }); }
+    if (a === 'dset') { const k = el.dataset.k; remake({ [k]: ['coat', 'silk'].includes(k) ? +v : v, sex: p.sex }); }
     if (a === 'dpar') { const i = +v; const j = d.parents.indexOf(i); if (j >= 0) d.parents.splice(j, 1); else if (d.parents.length < 3) d.parents.push(i); nm(); drawDraft(); }
     if (a === 'dstart') {
       nm();
       const p2 = d.prev; p2.id = newId();
       const pars = d.parents.map(i => pool[i]).filter(Boolean);
       const got = K.inherit(p2, pars);
+      if (d.bred && d.damRef && !d.damRef.npc) d.damRef.foals = (d.damRef.foals || 0) + 1;
+      if (d.bred && (!d.sireRef.npc || !d.damRef.npc)) checkAch('breed', { gen: p2.gen });
       if (H && pars[0]) { p2.sire = pars[0].name; if (pars[1]) p2.dam = pars[1].name; }
       p2.log.unshift(H ? `${p2.year}年5月 父${p2.sire}・母${p2.dam}の間に、${COAT[p2.coat].name}の仔馬「${p2.name}」が生まれた` : `${p2.year}年4月 ${p2.name}、競馬学校に入学`);
       got.forEach(g => p2.log.unshift('受け継いだ：' + g));
       S[slot(d.kind)] = K.newCareerState(p2);
+      S[slot(d.kind)].cutq = [H ? { k: 'birth', t: '誕生！', s: `${p2.name}（父${p2.sire}・母${p2.dam}）`, d: 2400 } : { k: 'school', t: '競馬学校に入学', s: p2.name, d: 2000 }];
       S._draft = null; save(); draw();
+    }
+  });
+}
+
+// ===== 配合 =====
+function drawBreed() {
+  const d = S._draft; const B = S._breed = S._breed || { s: null, d: null };
+  const own = S.horses.map((c, i) => ({ c, i }));
+  const sires = [...own.filter(x => sexOf(x.c) === '牡').map(x => ({ ref: x.c, key: 'o' + x.i })), ...NPC_SIRES.map((c, i) => ({ ref: c, key: 'n' + i }))];
+  const dams = [...own.filter(x => sexOf(x.c) === '牝').map(x => ({ ref: x.c, key: 'o' + x.i, full: (x.c.foals || 0) >= 6 })), ...NPC_DAMS.map((c, i) => ({ ref: c, key: 'n' + i }))];
+  const S1 = sires.find(x => x.key === B.s), D1 = dams.find(x => x.key === B.d);
+  const fee = S1 && S1.ref.npc ? Math.round((S1.ref.fee || 0) / 100) : 0;
+  const pv = S1 && D1 ? preview(S1.ref, D1.ref) : null;
+  const row = (x, kind) => `<button class="pitem ${((kind === 's' ? B.s : B.d) === x.key) ? 'on' : ''} ${x.full ? 'locked' : ''}" data-act="${kind}pick" data-v="${x.key}"><b>${x.ref.npc ? '🏠 ' : '⭐ '}${esc(x.ref.name)}</b><small>${x.ref.npc ? (kind === 's' ? `牧場の種牡馬${x.ref.fee ? `・種付け料 🥕${Math.round(x.ref.fee / 100)}` : ''}` : '牧場の繁殖牝馬') : `${x.ref.rank || ''}・${x.ref.g1Wins ? `G1 ${x.ref.g1Wins}勝` : `${x.ref.wins}勝`}${kind === 'd' ? `・産駒${x.ref.foals || 0}/6` : ''}`}</small></button>`;
+  document.getElementById('app').innerHTML = `${header('配合')}<div class="page career">
+    <div class="kick">父（種牡馬）</div><div class="plist">${sires.slice(0, 40).map(x => row(x, 's')).join('')}</div>
+    <div class="kick">母（繁殖牝馬）</div><div class="plist">${dams.slice(0, 40).map(x => row(x, 'd')).join('')}</div>
+    ${pv ? `<div class="kick">配合の見通し</div><div class="evcard legend"><h2>${esc(S1.ref.name)} × ${esc(D1.ref.name)}</h2>
+      <p>予想される素質：<b class="gold big">${pv.grade}</b><br>伸びやすい能力：${pv.best.map(k => K.KIND.horse.names[k]).join('・')}<br>${pv.skills.length ? `受け継ぐかもしれない特殊能力：${pv.skills.map(k => K.SKILLS[k].n).join('・')}` : '特殊能力の遺伝はなし'}</p></div>` : '<p class="note">父と母を1頭ずつ選ぶ。⭐は自分が育てた馬、🏠は牧場の馬。</p>'}
+    <div class="stack"><button class="btn red" data-act="breedGo" ${pv && S.carrots >= fee ? '' : 'disabled'}>${!pv ? '父と母を選んでください' : S.carrots < fee ? '金のにんじんが足りない' : `この配合で産ませる${fee ? `（🥕${fee}）` : ''}`}</button><button class="btn ghost" data-act="back">戻る</button></div></div>`;
+  document.getElementById('app').querySelectorAll('[data-act]').forEach(el => el.onclick = () => {
+    const a = el.dataset.act, v = el.dataset.v;
+    if (a === 'home') return goHome();
+    if (a === 'back') return drawDraft();
+    if (a === 'spick') { B.s = v; return drawBreed(); }
+    if (a === 'dpick') { const x = dams.find(y => y.key === v); if (x && x.full) return; B.d = v; return drawBreed(); }
+    if (a === 'breedGo' && pv) {
+      S.carrots -= fee;
+      const foal = makeFoal(S1.ref, D1.ref);
+      d.prev = foal; d.bred = true; d.custom = false; d.parents = []; d.sireRef = S1.ref; d.damRef = D1.ref;
+      save(); return drawDraft();
     }
   });
 }
@@ -244,13 +287,13 @@ SCREENS.event = (C) => {
 // ===== レース前 =====
 SCREENS.afterEvents = (C) => {
   const p = C.p, r = C.raceSel;
-  if (!r) { K.runTurn(C); save(); return SCREENS.mres(C); }
+  if (!r) { runTurnC(C); save(); return SCREENS.mres(C); }
   const H = p.kind === 'horse';
   const jks = [NPC_JOCKEY, ...S.jockeys];
   const jk = H ? (S.jockeys.find(j => j.id === p.jockeyId) || NPC_JOCKEY) : null;
   if (!C.style) C.style = H ? p.style : p.pref;
   return `${pcard(p, 'compact')}<div class="kick">${r.m}月　出走</div>
-  <div class="evcard legend"><h2>${r.g ? `<span class="grade g-${r.g}">${r.g}</span>` : ''}${esc(r.name)}</h2><p>${r.place || ''} ${r.surf === 'ダ' ? 'ダート' : '芝'}${r.dist}m${r.prize ? `　1着賞金 ${yen(r.prize)}` : ''}</p>
+  <div class="evcard legend"><h2>${r.g ? `<span class="grade g-${r.g}">${r.g}</span>` : ''}${esc(r.name)}</h2><p>${r.abroad ? `🌍 ${r.abroad}・` : ''}${r.place || ''} ${r.surf === 'ダ' ? 'ダート' : '芝'}${r.dist}m${r.prize ? `　1着賞金 ${yen(r.prize)}` : ''}</p><p class="sub">天気 ${r.weather || '晴'}・馬場 ${r.going || '良'}${r.cost ? `・遠征費 ${yen(r.cost)}` : ''}</p>
   ${H ? `<p class="sub">体力 ${Math.round(p.sta)}・調子 ${COND_NAMES[K.condIdx(p)]}${p.sta < 30 ? '（疲れが残っている…）' : ''}</p>` : `<p class="sub">${r.mock ? '学校の馬に乗る' : '依頼された馬に乗る'}</p>`}</div>
   ${H ? `<div class="label">騎手</div><div class="chips">${jks.map((j, i) => `<button class="chip ${((p.jockeyId ?? null) === (j.id ?? null)) ? 'on' : ''}" data-act="jk" data-v="${i}">${esc(j.name)}${j.rank ? `<small>${j.rank}</small>` : ''}</button>`).join('')}</div>` : ''}
   <div class="label">作戦</div><div class="chips">${STYLES.map(s => `<button class="chip ${s === C.style ? 'on' : ''}" data-act="style" data-v="${s}">${s}</button>`).join('')}</div>
@@ -334,6 +377,8 @@ function doRetire(C) {
   S.carrots += bonus;
   C.summary = { card, bonus };
   C.screen = 'retired'; C.auto = false; C.tab = 'play';
+  (C.cutq = C.cutq || []).push(card.died ? { k: 'death', t: 'さようなら', s: p.name, d: 3000 } : { k: 'retire', t: '引退', s: `${p.name}　おつかれさま`, d: 2600 });
+  checkAch('retire', { p, card });
   save();
 }
 SCREENS.retireNow = (C) => { doRetire(C); return SCREENS.retired(C); };
@@ -403,20 +448,29 @@ function act(C, a, v, el) {
     case 'int': p.int = v; C._keepScroll = true; break;
     case 'toMonth': K.startTurn(C); break;
     case 'pickAct': C.act = v; C.raceSel = null; C._keepScroll = true; break;
-    case 'pickRace': { const r = raceList(C)[+v]; if (r && !r.locked) C.raceSel = { ...r }; C._keepScroll = true; break; }
+    case 'pickRace': { const r = raceList(C)[+v]; if (r && !r.locked) C.raceSel = { ...r, ...rollWeather(r.m) }; C._keepScroll = true; break; }
     case 'confirm': K.confirmAction(C); break;
-    case 'choose': K.chooseEvent(C, +v); break;
+    case 'choose': {
+      K.chooseEvent(C, +v);
+      const fx = (C.evr && C.evr.fx) || [];
+      C.cutq = C.cutq || [];
+      if (fx.some(f => f[0] === '結婚')) C.cutq.push({ k: 'wedding', t: '結婚！', s: p.fam.partner ? `${p.fam.partner.n}と永遠の誓い` : '', d: 2400 });
+      if (fx.some(f => f[0] === '家族' && /誕生/.test(f[1]))) C.cutq.push({ k: 'baby', t: '家族が増えた！', s: fx.find(f => f[0] === '家族')[1], d: 2200 });
+      break;
+    }
     case 'nextEv': K.nextEvent(C); break;
     case 'jk': { const j = [NPC_JOCKEY, ...S.jockeys][+v]; p.jockeyId = j.id ?? null; C._keepScroll = true; break; }
     case 'style': C.style = v; C._keepScroll = true; break;
     case 'ride3d': return runRace(C, true);
     case 'rideAuto': return runRace(C, false);
-    case 'afterTurn': C.style = null; K.afterTurn(C); break;
+    case 'afterTurn': C.style = null; K.afterTurn(C); if (C.screen === 'report' && C.report.awards.length) { (C.cutq = C.cutq || []).push({ k: 'award', t: C.report.awards[0], s: `${p.year}年`, d: 2200 }); checkAch('award', { p, awards: C.report.awards }); } break;
     case 'toOffers': K.buildOffers(C); break;
     case 'offer': {
       const k = el.dataset.k;
       if (k === 'retire' && !C.auto && !confirm('本当に引退しますか？')) return;
+      const wasSchool = p.kind === 'jockey' && p.stage === 'school';
       K.pickOffer(C, k, k === 'stable' ? +v : v);
+      if (wasSchool && p.stage === 'pro') (C.cutq = C.cutq || []).push({ k: 'debutJ', t: '騎手デビュー！', s: K.stableOf(p) ? K.stableOf(p).n : 'フリー', d: 2200 });
       if (C.screen === 'camp') p.log.unshift(`${p.year}年 ${p.kind === 'horse' ? (p.age >= 2 ? K.PATHS[p.path].n + 'へ' : `${p.age}歳に`) : p.free ? 'フリーで騎乗' : K.stableOf(p) ? K.stableOf(p).n + '所属' : ''}`);
       break;
     }
@@ -441,13 +495,32 @@ function raceCfg(C) {
 function runRace(C, live) {
   const cfg = raceCfg(C);
   const done = (res) => {
-    if (!res) { C.raceSel = null; C.act = 'rest'; K.runTurn(C); save(); draw(); return; }
+    if (!res) { C.raceSel = null; C.act = 'rest'; runTurnC(C); save(); draw(); return; }
     res.jname = cfg.player.jname;
-    C.raceRes = res; K.runTurn(C); if (res.pos === 1) S.carrots += 0; save(); draw();
+    C.raceRes = res; runTurnC(C); save(); draw();
   };
   if (!live) { done(simulateRace(cfg)); return; }
   stopAuto(C);
   startRace({ ...cfg, onDone: done });
+}
+
+// ===== ターンの結果からカットシーンを決める =====
+function runTurnC(C) {
+  const p = C.p, w0 = p.wins, n0 = (p.races || []).length;
+  const res = K.runTurn(C);
+  const q = C.cutq = C.cutq || [];
+  if (res.fate) q.push(res.fate.ty === 'death' ? { k: 'death', t: '訃報', s: res.fate.why, d: 3200 } : { k: 'injury', t: res.fate.head, s: res.fate.why, d: 2600 });
+  for (const r of res.races || []) {
+    if (r.pos === 1 && r.g === 'G1') q.push({ k: r.abroad ? 'g1' : 'g1', t: `${r.name} 制覇！`, s: p.kind === 'horse' ? p.name : `${r.horse || ''}に騎乗`, d: 2800 });
+    else if (r.pos === 1 && p.kind === 'horse' && w0 === 0) q.push({ k: 'win', t: '初勝利！', s: r.name, d: 2200 });
+  }
+  if (p.kind === 'horse' && n0 === 0 && (p.races || []).length > 0) q.unshift({ k: 'debut', t: 'デビュー！', s: res.races[0] ? res.races[0].name : '', d: 2000 });
+  for (const k of res.skills || []) q.push({ k: 'skill', t: `「${K.SKILLS[k].n}」習得！`, s: K.SKILLS[k].d, d: 1800 });
+  if ((res.races || []).some(r => r.abroad)) q.unshift({ k: 'abroad', t: '海外遠征', s: res.races.find(r => r.abroad).abroad + 'へ', d: 1600 });
+  if (!p.flags.inj2 && p.inj >= 12 && !res.fate) { p.flags.inj2 = 1; q.push({ k: 'injury', t: '大きなケガ', s: `${p.injName}（全治${Math.ceil(p.inj)}週）`, d: 2200 }); }
+  if (p.inj < 12) p.flags.inj2 = 0;
+  checkAch('turn', { p, res });
+  return res;
 }
 
 // ===== オート =====
@@ -465,11 +538,11 @@ function autoStep(C) {
     case 'camp': K.startTurn(C); break;
     case 'month': {
       let a = K.autoPickAct(C);
-      if (a.race) { const r = K.autoPickRace(C); if (r) C.raceSel = { ...r }; else a = K.actsFor(p).find(x => x.id === 'rest') || K.actsFor(p)[0]; }
+      if (a.race) { const r = K.autoPickRace(C); if (r) C.raceSel = { ...r, ...rollWeather(r.m) }; else a = K.actsFor(p).find(x => x.id === 'rest') || K.actsFor(p)[0]; }
       C.act = a.id; K.confirmAction(C); break;
     }
     case 'event': if (!C.evr) K.chooseEvent(C, K.autoPickChoice(C)); else K.nextEvent(C); break;
-    case 'afterEvents': if (C.raceSel) { const cfg = raceCfg(C); const res = simulateRace(cfg); res.jname = cfg.player.jname; C.raceRes = res; } K.runTurn(C); break;
+    case 'afterEvents': if (C.raceSel) { const cfg = raceCfg(C); const res = simulateRace(cfg); res.jname = cfg.player.jname; C.raceRes = res; } runTurnC(C); break;
     case 'mres': K.afterTurn(C); break;
     case 'report': K.buildOffers(C); break;
     case 'offers': {

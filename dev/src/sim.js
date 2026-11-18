@@ -12,10 +12,51 @@ export function hashStr(s) { let h = 2166136261; for (let i = 0; i < s.length; i
 const rnd = (a, b) => a + SR() * (b - a);
 const pick = (arr) => arr[Math.floor(SR() * arr.length)];
 
-export const TRACK = { Ls: 500, R: 160, width: 26, finishU: 400 };
-TRACK.P = 2 * TRACK.Ls + 2 * Math.PI * TRACK.R;
-const { Ls, R, P } = TRACK;
-const PR = Math.PI * R;
+// ===== 競馬場（直線の長さ・コーナーの大きさ・回り・坂） =====
+// hills: [ゴールまでの距離（始まり）, ゴールまでの距離（終わり）, 高さの変化m]
+export const VENUES = {
+  東京: { Ls: 525, R: 170, dir: 1, stand: 'big', hills: [[480, 320, 2.0], [1450, 1250, -2.0]] },
+  中山: { Ls: 310, R: 135, dir: -1, stand: 'big', hills: [[180, 70, 2.2], [1000, 720, -2.2]] },
+  京都: { Ls: 400, R: 150, dir: -1, stand: 'big', hills: [[1050, 850, 4.3], [850, 600, -4.3]] },
+  阪神: { Ls: 470, R: 150, dir: -1, stand: 'big', hills: [[200, 80, 1.8], [950, 720, -1.8]] },
+  中京: { Ls: 410, R: 150, dir: 1, stand: 'big', hills: [[380, 240, 2.0], [1150, 900, -2.0]] },
+  新潟: { Ls: 660, R: 150, dir: 1, stand: 'mid', hills: [] },
+  札幌: { Ls: 270, R: 125, dir: -1, stand: 'mid', hills: [] },
+  函館: { Ls: 262, R: 125, dir: -1, stand: 'mid', hills: [[150, 60, 1.0], [700, 500, -1.0]] },
+  福島: { Ls: 295, R: 125, dir: -1, stand: 'mid', hills: [[200, 100, 1.2], [800, 600, -1.2]] },
+  小倉: { Ls: 293, R: 125, dir: -1, stand: 'mid', hills: [[250, 120, 1.0], [900, 650, -1.0]] },
+  学校: { Ls: 300, R: 125, dir: -1, stand: 'none', hills: [] },
+  ロンシャン: { Ls: 530, R: 215, dir: -1, stand: 'paris', hills: [[1900, 1500, 6], [1300, 800, -6]], abroad: 'フランス' },
+  メイダン: { Ls: 450, R: 190, dir: 1, stand: 'night', hills: [], abroad: 'ドバイ' },
+  リヤド: { Ls: 450, R: 175, dir: 1, stand: 'night', hills: [], abroad: 'サウジアラビア' },
+  シャティン: { Ls: 430, R: 160, dir: -1, stand: 'city', hills: [], abroad: '香港' },
+  アスコット: { Ls: 500, R: 190, dir: -1, stand: 'big', hills: [[600, 100, 4], [1750, 1300, -4]], abroad: 'イギリス' },
+};
+export const TRACK = { width: 26 };
+let Ls, R, P, PR, HILL = [];
+export function setVenue(name) {
+  const V = VENUES[name] || VENUES['東京'];
+  TRACK.name = VENUES[name] ? name : '東京';
+  TRACK.Ls = Ls = V.Ls; TRACK.R = R = V.R; TRACK.P = P = 2 * Ls + 2 * Math.PI * R; PR = Math.PI * R;
+  TRACK.finishU = Ls * 0.8; TRACK.dir = V.dir; TRACK.stand = V.stand; TRACK.abroad = V.abroad || null;
+  HILL = [];
+  for (const [a, b, dh] of V.hills) {
+    let u0 = ((TRACK.finishU - a) % P + P) % P, u1 = ((TRACK.finishU - b) % P + P) % P;
+    if (u1 < u0) { const L = P - u0 + u1; HILL.push([u0, P, dh * (P - u0) / L]); HILL.push([0, u1, dh * u1 / L]); }
+    else HILL.push([u0, u1, dh]);
+  }
+  // 坂をつなげて一周で元の高さに戻る（最も低い所を0にする）
+  let mn = 0; for (let u = 0; u < P; u += 10) mn = Math.min(mn, elevRaw(u));
+  TRACK.base = -mn;
+}
+function elevRaw(u) {
+  let e = 0;
+  for (const [a, b, dh] of HILL) { const t = u <= a ? 0 : u >= b ? 1 : (u - a) / (b - a); e += dh * t * t * (3 - 2 * t); }
+  return e;
+}
+export function elev(u) { u = ((u % P) + P) % P; return elevRaw(u) + (TRACK.base || 0); }
+export function grade(u) { return (elev(u + 2) - elev(u - 2)) / 4; }
+setVenue('東京');
 
 // 内ラチ上の位置uと、内ラチからの距離d → ワールド座標
 export function trackPos(u, d, out = {}) {
@@ -33,9 +74,29 @@ export function trackPos(u, d, out = {}) {
     x = -Ls / 2 + R * nx; z = R * nz; hx = -Math.cos(th); hz = Math.sin(th);
   }
   out.x = x + nx * d; out.z = z + nz * d; out.hx = hx; out.hz = hz; out.nx = nx; out.nz = nz; out.curve = curve;
+  out.y = HILL.length ? elev(u) : 0;
   return out;
 }
 export function onCurve(u) { u = ((u % P) + P) % P; return (u >= Ls && u < Ls + PR) || u >= 2 * Ls + PR; }
+
+// ===== 天気と馬場 =====
+export const WEATHERS = ['晴', '曇', '小雨', '雨', '雪'];
+export function rollWeather(month, rnd01 = Math.random) {
+  const x = rnd01();
+  const snow = (month === 1 || month === 2) ? 0.06 : 0;
+  const rain = [6, 7, 9].includes(month) ? 0.3 : 0.18;
+  const w = x < snow ? '雪' : x < snow + rain * 0.5 ? '雨' : x < snow + rain ? '小雨' : x < snow + rain + 0.25 ? '曇' : '晴';
+  const y = rnd01();
+  const going = w === '雨' ? (y < 0.5 ? '不良' : '重') : w === '小雨' || w === '雪' ? (y < 0.6 ? '稍重' : '重') : w === '曇' ? (y < 0.15 ? '稍重' : '良') : (y < 0.06 ? '稍重' : '良');
+  return { weather: w, going };
+}
+// 馬場によるスピードと体力の変化（パワーがある馬ほど重い馬場に強い）
+export function goingFx(surf, going, pow) {
+  const i = ['良', '稍重', '重', '不良'].indexOf(going); if (i <= 0) return [1, 1];
+  const resist = 1 - (pow - 50) / 160;
+  if (surf === 'ダ') return [1 + [0, 0.004, 0.008, 0.01][i], 1 + [0, 0.01, 0.02, 0.035][i] * resist];
+  return [1 - [0, 0.008, 0.02, 0.035][i] * resist, 1 + [0, 0.03, 0.06, 0.1][i] * resist];
+}
 
 const STYLE_CRUISE = { '逃げ': 0.927, '先行': 0.913, '差し': 0.9, '追込': 0.889 };
 const STYLE_SPURT = { '逃げ': 520, '先行': 620, '差し': 720, '追込': 780 };
@@ -113,7 +174,9 @@ export function createRace(cfg) {
   // ゲート番号をランダムに
   const gates = cfg.fixedGates ? racers.map((_, i) => i) : racers.map((_, i) => i).map(i => [SR(), i]).sort((a, b) => a[0] - b[0]).map(x => x[1]);
   racers.forEach((r, i) => { r.gate = gates[i] + 1; r.u = u0; r.d = 1.1 + gates[i] * 1.25; r.num = gates[i] + 1; });
-  return { dist: cfg.dist, surf: cfg.surf, u0, racers, t: 0, started: false, countdown: 3.2, finishedCount: 0, order: [], player: racers.find(r => r.isPlayer) || null, events: [], noBand: !!cfg.noBand };
+  const going = cfg.going || '良';
+  for (const r of racers) { const [sf, ef] = goingFx(cfg.surf, going, r.h.pow); r.top *= sf; r.eff *= ef; }
+  return { dist: cfg.dist, surf: cfg.surf, going, weather: cfg.weather || '晴', u0, racers, t: 0, started: false, countdown: 3.2, finishedCount: 0, order: [], player: racers.find(r => r.isPlayer) || null, events: [], noBand: !!cfg.noBand };
 }
 
 function sustainSpeed(r, remaining, whipping) {
@@ -174,6 +237,8 @@ export function stepRace(race, dt, input) {
     if (r.energy <= 0) target = Math.min(target, r.top * (0.85 + 0.0007 * r.h.gut) + (whipping ? 0.15 : 0));
     else if (ratio < 0.12) target *= 0.95 + 0.0005 * r.h.gut;
     if (rem < r.spurtDist) target *= r.sue;
+    // 坂（上りは遅くなる。パワーがあると楽）
+    if (HILL.length) { const g = grade(r.u); target *= g > 0 ? 1 - g * 3 * (1 - r.h.pow / 200) : 1 - g * 1.2; r.slope = g; } else r.slope = 0;
     target = Math.min(target, r.top * 1.07);
     // ---- 前が詰まる ----
     r.blocked = false;
@@ -189,7 +254,7 @@ export function stepRace(race, dt, input) {
     // ---- スタミナ ----
     if (!r.finished) {
       const m = r.eff * (r.whipT > 0 ? r.whipDrain : 1);
-      r.energy -= Math.pow(r.v / VREF, 4) * m * r.v * dt;
+      r.energy -= Math.pow(r.v / VREF, 4) * m * r.v * dt * (r.slope > 0 ? 1 + r.slope * 8 : 1);
       if (r.energy < 0) r.energy = 0;
     }
     r.whipT -= dt; r.whipCool -= dt;
@@ -290,7 +355,8 @@ export function simulateRace(cfg) {
   const pSpec = { ...cfg.player, isPlayer: true, ai: true };
   const n = cfg.fieldSize || 12;
   if (opps.length < n - 1) opps.push(...makeOpponents(cfg.race, pSpec, n - 1 - opps.length));
-  const race = createRace({ dist: cfg.race.dist, surf: cfg.race.surf, specs: [pSpec, ...opps] });
+  setVenue(cfg.race.place);
+  const race = createRace({ dist: cfg.race.dist, surf: cfg.race.surf, specs: [pSpec, ...opps], going: cfg.race.going, weather: cfg.race.weather });
   race.countdown = 0; race.started = true;
   let t = 0;
   while (race.finishedCount < race.racers.length && t < 400) { stepRace(race, 1 / 20, null); t += 1 / 20; race.events.length = 0; }
@@ -303,7 +369,8 @@ export function simulateRace(cfg) {
 // 出走馬を全部指定して結果だけ出す（賭け用）
 export function simulateField(specs, race, seed, dt = 1 / 60) {
   if (seed != null) setSimSeed(seed);
-  const R = createRace({ dist: race.dist, surf: race.surf, specs, fixedGates: true, noBand: true });
+  setVenue(race.place);
+  const R = createRace({ dist: race.dist, surf: race.surf, specs, fixedGates: true, noBand: true, going: race.going, weather: race.weather });
   R.countdown = 0; R.started = true;
   let t = 0;
   while (R.finishedCount < R.racers.length && t < 400) { stepRace(R, dt, null); t += dt; R.events.length = 0; }

@@ -1,6 +1,6 @@
 // ===== 賭け（馬券）のしくみ：実際のJRAの券種・枠番・払戻率にそろえる =====
 import { APT_FACTOR, COND_SPEED, GRADED, SIRE, SILKS, COAT, clamp, NAME_A, NAME_B } from './data.js';
-import { hashStr, simulateField } from './sim.js';
+import { hashStr, simulateField, rollWeather } from './sim.js';
 
 export const FRAME_COLORS = ['#ffffff', '#222222', '#e8332b', '#2a6bd8', '#f2d22e', '#2a9a4a', '#f08a24', '#f39ac0'];
 export const FRAME_TEXT = ['#111', '#fff', '#fff', '#fff', '#111', '#fff', '#111', '#111'];
@@ -65,7 +65,8 @@ export function makeCard(weekOffset = 0, room = '') {
   });
   if (main) races.push({ no: 6, name: main.name, cls: main.g, g: main.g, age: main.age, dist: main.dist, surf: main.surf, place, lv: LV[main.g] + (main.age === '2' ? -14 : main.age === '3' ? -5 : 0), start: '15:40' });
   else races.push({ no: 6, name: `${OP_HEAD[Math.floor(R() * OP_HEAD.length)]}ステークス`, cls: 'オープン', g: null, age: '3+', dist: 1800, surf: '芝', place, lv: LV['オープン'], start: '15:40' });
-  for (const r of races) r.horses = makeField(r, R);
+  const wx = rollWeather(m, R);
+  for (const r of races) { r.horses = makeField(r, R); r.weather = wx.weather; r.going = wx.going; if (R() < 0.25) { const g2 = rollWeather(m, R); r.going = g2.going === '良' && wx.going !== '良' ? wx.going : wx.going; } }
   for (const r of races) priceRace(r);
   return { key: `${room || 'solo'}|${d.getFullYear()}-${m}-${d.getDate()}`, room, date: d.getTime(), label: dayLabel(d), place, races, week: weekOffset };
 }
@@ -249,8 +250,12 @@ export function specsOf(r) {
 }
 
 // たくさん走らせて勝つ確率を調べる（少しずつ実行して画面を止めない）
+const PENDING = new Map();
 export function mcPrice(card, r, n = 40, onProgress) {
-  return new Promise((resolve) => {
+  const pk = card.key + '#' + r.no;
+  if (r.priced) return Promise.resolve();
+  if (PENDING.has(pk)) return PENDING.get(pk);
+  const pr = new Promise((resolve) => {
     const w = Array(r.horses.length).fill(0); let i = 0;
     const base = raceSeed(card, r) ^ 0x5bd1e995;
     const specs = specsOf(r);
@@ -259,10 +264,11 @@ export function mcPrice(card, r, n = 40, onProgress) {
       while (i < n && performance.now() - t0 < 30) { const res = simulateField(specs, r, (base + i * 7919) >>> 0, 1 / 20); w[res[0].num - 1]++; i++; }
       onProgress && onProgress(i / n);
       if (i < n) setTimeout(tick, 0);
-      else { priceRace(r, { w, n }); r.priced = true; resolve(); }
+      else { priceRace(r, { w, n }); r.priced = true; PENDING.delete(pk); resolve(); }
     };
     tick();
   });
+  PENDING.set(pk, pr); return pr;
 }
 
 export function cardKey(weekOffset = 0, room = '') { const d = raceDay(weekOffset); return `${room || 'solo'}|${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; }
