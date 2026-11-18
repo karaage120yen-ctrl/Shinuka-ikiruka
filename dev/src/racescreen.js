@@ -3,7 +3,7 @@ import { createRace, stepRace, makeOpponents, marginText, trackPos, TRACK, setSi
 import { RaceView } from './render3d.js';
 import { fmtTime, SILKS } from './data.js';
 import * as A from './audio.js';
-import { Commentator, setVoice, unlockVoice, stopVoice } from './commentary.js';
+import { Commentator } from './commentary.js';
 import { S, save } from './store.js';
 
 let active = null;
@@ -52,7 +52,6 @@ export function startRace(cfg) {
   const lowPower = /iPhone|iPad|Android/i.test(navigator.userAgent) && (navigator.hardwareConcurrency || 4) <= 4;
   const view = new RaceView(document.getElementById('race-canvas'), race, { view: SPEC ? 'tv' : (S.settings.view || 'fp'), title: cfg.race.name, lowPower });
   A.initAudio(); A.setSound(S.settings.sound); A.startCrowd(); A.crowdLevel(0.05);
-  setVoice(S.settings.voice !== false && S.settings.sound); unlockVoice();
   const caller = new Commentator(race, { focus: () => race.player });
 
   const input = { steer: 0, whip: false, l: false, r: false };
@@ -196,7 +195,7 @@ export function startRace(cfg) {
     if (ended === 'done') return; ended = 'done';
     cancelAnimationFrame(raf);
     window.removeEventListener('keydown', kd); window.removeEventListener('keyup', ku);
-    A.stopCrowd(); stopVoice();
+    A.stopCrowd();
     view.dispose();
     root.classList.add('hidden'); root.classList.remove('spectate'); root.innerHTML = '';
     if (SPEC) setSimSeed(null);

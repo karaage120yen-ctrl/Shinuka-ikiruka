@@ -239,7 +239,6 @@ function settingsScreen() {
   <div class="page">
     <div class="card"><label class="sw-row"><span>効果音</span><input type="checkbox" id="snd" ${S.settings.sound ? 'checked' : ''}></label>
     <label class="sw-row"><span>カットシーン</span><input type="checkbox" id="cuts" ${S.settings.cuts !== false ? 'checked' : ''}></label>
-    <label class="sw-row"><span>実況の声</span><input type="checkbox" id="voice" ${S.settings.voice !== false ? 'checked' : ''}></label>
     <label class="sw-row"><span>レースの視点（最初）</span><select id="vw"><option value="fp" ${S.settings.view === 'fp' ? 'selected' : ''}>騎手視点</option><option value="back" ${S.settings.view === 'back' ? 'selected' : ''}>後ろから</option><option value="tv" ${S.settings.view === 'tv' ? 'selected' : ''}>中継</option></select></label></div>
     <div class="card"><b>遊び方</b><p class="small">馬は0歳から育てて、2歳6月からレースに出られます。7歳の年末か、重い故障で引退。疲れたまま調教するとケガをしやすく、重い故障だと競走生命の危機に。<br>レースは騎手視点。◀▶で進路を変え、ムチで加速。体力ゲージの使い方が勝負の分かれ目です。</p></div>
     <div class="card" id="acct">${acctHtml()}</div>
@@ -248,7 +247,6 @@ function settingsScreen() {
   </div>`);
   document.getElementById('snd').onchange = (e) => { S.settings.sound = e.target.checked; setSound(S.settings.sound); save(); };
   document.getElementById('cuts').onchange = (e) => { S.settings.cuts = e.target.checked; save(); };
-  document.getElementById('voice').onchange = (e) => { S.settings.voice = e.target.checked; save(); };
   document.getElementById('vw').onchange = (e) => { S.settings.view = e.target.value; save(); };
   bind({ go, reset: () => { if (confirm('育てた馬・騎手・ガチャをすべて消します。よろしいですか？')) { resetAll(); home(); } } });
   bindAcct();
