@@ -23,6 +23,9 @@ export function openCareer(kind, homeFn) {
   let C = getC();
   if (C && !C.p) { S[slot(kind)] = null; C = null; } // 古い形式のデータは捨てる
   if (!C) { draftNew(kind); return; }
+  // 1ターンの長さを変えたので、前のデータの月をそろえる
+  const T = K.KIND[kind].turns;
+  if (!T.includes(C.p.month)) { C.p.month = [...T].reverse().find(x => x <= C.p.month) || T[0]; if (['month', 'event', 'afterEvents'].includes(C.screen)) K.startTurn(C); save(); }
   draw();
 }
 
@@ -70,7 +73,7 @@ function careerBar(p) {
   const done = (p.age - startAge) * T.length + Math.max(0, T.indexOf(p.month));
   const pct = Math.min(100, Math.round(done / total * 100));
   const fa = H ? 4 : 30;
-  const note = H ? (p.age < 2 ? `デビューまであと${2 - p.age}年（2歳6月から）` : p.age < fa ? `運命の分岐点まであと${fa - p.age}年` : '引退は7歳の年末') : (p.stage === 'school' ? 'デビューは18歳' : p.age < fa ? `運命の分岐点まであと${fa - p.age}年` : `${p.age >= 33 ? '引退を選べる' : '33歳から引退を選べる'}・45歳で引退`);
+  const note = H ? (p.age < 2 ? `デビューまであと${2 - p.age}年（2歳6月から）` : p.age < fa ? `運命の分岐点まであと${fa - p.age}年` : '引退は7歳の年末') : (p.stage === 'school' ? 'デビューは18歳' : p.age < fa ? `運命の分岐点まであと${fa - p.age}年` : `${p.age >= 30 ? '引退を選べる' : '30歳から引退を選べる'}・40歳で引退`);
   return `<div class="cbar"><div class="cbar-t"><span>${H ? '競走馬生' : '騎手人生'} ${pct}%</span><span>${note}</span></div><div class="cbar-b"><i style="width:${pct}%"></i><em style="left:${Math.round(((fa - startAge) * T.length) / total * 100)}%"></em></div></div>`;
 }
 

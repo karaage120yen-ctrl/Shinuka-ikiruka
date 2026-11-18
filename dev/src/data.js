@@ -1,3 +1,5 @@
+import { HORSE_NAMES } from './names.js';
+export { HORSE_NAMES };
 // ===== 基本データ =====
 export const H_KEYS = ['spd', 'sta', 'pow', 'gut', 'wis'];
 export const H_NAMES = { spd: 'スピード', sta: 'スタミナ', pow: 'パワー', gut: '根性', wis: '賢さ' };
@@ -55,6 +57,7 @@ export const NAME_B = ['ボルト', 'ハート', 'ウイング', 'ソード', '�
   'ファイア', 'シャドウ', 'リーフ', 'スピリット', 'エース', 'ムーン', 'サン', 'オーラ', 'タイガー', 'ドラゴン', 'ホープ', 'ビクトリー',
   'フラッシュ', 'テイオー', 'オー', 'ハヤブサ', 'イカヅチ', 'サムライ', 'ゼロ', 'ブライアン'];
 export function randomHorseName() {
+  if (Math.random() < 0.5) return pick(HORSE_NAMES);
   let n = pick(NAME_A) + pick(NAME_B);
   if (n.length > 9) n = n.slice(0, 9);
   return n;

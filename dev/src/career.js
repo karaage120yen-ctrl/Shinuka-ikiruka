@@ -11,12 +11,12 @@ const gauss = () => { let u = 0, v = 0; while (!u) u = Math.random(); while (!v)
 export const KIND = {
   horse: {
     keys: H_KEYS, names: H_NAMES, w: { spd: 1.3, sta: 1, pow: 0.9, gut: 0.8, wis: 0.6 },
-    turns: [1, 3, 5, 7, 9, 11], len: 2, rate: 0.03,
+    turns: [1, 4, 7, 10], len: 3, rate: 0.03,
     evalName: '調教師の評価', popName: 'ファン', moneyName: '馬主の資金',
   },
   jockey: {
     keys: J_KEYS, names: J_NAMES, w: { tec: 1.2, whip: 1, bal: 1, fit: 0.8, jud: 1 },
-    turns: [1, 4, 7, 10], len: 3, rate: 0.015,
+    turns: [1, 7], len: 6, rate: 0.015,
     evalName: '騎乗依頼の評価', popName: '人気', moneyName: '所持金',
   },
 };
@@ -92,7 +92,7 @@ export const ACTS = {
     { id: 'pool', n: 'プール調教', d: '脚に負担をかけずにスタミナ強化', g: 0.8, sta: 2, inj: 0.3, boost: ['sta'], on: ['tc'] },
     { id: 'rest', n: '馬房で休養', d: '体力と調子を回復する。成長は控えめ', g: 0.35, sta: 20, form: 6, on: ['farm', 'ikusei', 'tc'] },
     { id: 'farmout', n: '外厩で放牧', d: 'しっかりリフレッシュ', g: 0.25, sta: 32, form: 10, cost: 30, on: ['tc'] },
-    { id: 'race', n: 'レースに出る', d: 'この2か月のレースから選んで出走', g: 0.6, sta: 0, race: 1, on: ['tc'] },
+    { id: 'race', n: 'レースに出る', d: 'この3か月のレースから選んで出走', g: 0.6, sta: 0, race: 1, on: ['tc'] },
   ],
   jockey: [
     { id: 'ride', n: '騎乗訓練', d: '毎日の騎乗訓練に集中する', g: 1, sta: -2, eval: 1, on: ['school'] },
@@ -103,7 +103,7 @@ export const ACTS = {
     { id: 'family', n: '大切な人と過ごす', d: '家族・恋人との時間。心身も回復する', g: 0.55, sta: 9, form: 5, fam: 14, love: 16, on: ['school', 'pro'] },
     { id: 'media', n: 'メディア出演', d: '出演料と人気。調教師はいい顔をしない', g: 0.5, sta: -5, pop: 3, eval: -3, media: 1, on: ['pro'] },
     { id: 'mock', n: '模擬レースに出る', d: '自分で乗る3Dレース。順位がよいほど大きく成長', g: 0.8, race: 1, on: ['school'] },
-    { id: 'bigrace', n: '大一番に騎乗', d: 'この3か月の重賞から選んで、自分で乗る', g: 1, race: 1, on: ['pro'] },
+    { id: 'bigrace', n: '大一番に騎乗', d: 'この半年の重賞から選んで、自分で乗る', g: 1, race: 1, on: ['pro'] },
     { id: 'abroad', n: '海外で騎乗修行', d: '海外の一流に学ぶ。成長2.2倍。日本の騎乗はお休み', g: 2.2, sta: -8, cost: 300, norides: 1, on: ['pro'] },
   ],
 };
@@ -195,7 +195,7 @@ export function makeHorse(d = {}) {
     kind: 'horse', name: d.name || randomHorseName(), coat, sire: d.sire || pick(SIRE), dam: d.dam || pick(DAM), sex: d.sex || (Math.random() < 0.5 ? '牡' : '牝'), gen: 0,
     style, growth: d.growth || pick(['early', 'normal', 'normal', 'late']), pot, st, cap,
     apt: { turf: APT_LETTERS[clamp(Math.round(rnd(2.6, 6.6)), 0, 6)], dirt: APT_LETTERS[clamp(Math.round(rnd(1.6, 6.6)), 0, 6)] },
-    age: 0, year: 2027, month: 5, season: 0, sta: 90, cond: 70, pop: 5, eval: 50, money: 1500, inj: 0, injName: '',
+    age: 0, year: 2027, month: 4, season: 0, sta: 90, cond: 70, pop: 5, eval: 50, money: 1500, inj: 0, injName: '',
     focus: 'all', int: 'std', items: {}, subs: {}, seasonBuys: {}, skills: legend ? ['legend'] : monster ? ['monster'] : [],
     record: [0, 0, 0, 0], races: [], wins: 0, gradedWins: 0, g1Wins: 0, titles: [], awards: [], earnings: 0,
     log: [], yearLog: [], seen: {}, flags: { potEst: potGrade(pot + rnd(-3, 3)) }, fate: null, path: 'middle', jockeyId: null, playMs: 0,
@@ -212,7 +212,7 @@ export function makeJockey(d = {}) {
   return {
     kind: 'jockey', name: d.name || randomJockeyName(), silk: d.silk ?? ri(0, SILKS.length - 1), pref: d.pref || pick(['逃げ', '先行', '差し', '追込']),
     growth: d.growth || pick(['early', 'normal', 'normal', 'late']), pot, st, cap,
-    age: 16, year: 2027, month: 4, season: 0, stage: 'school', stable: null, free: false,
+    age: 16, year: 2027, month: 7, season: 0, stage: 'school', stable: null, free: false,
     sta: 85, cond: 70, pop: 5, eval: 45, money: 20, inj: 0, injName: '',
     focus: 'all', int: 'std', items: {}, subs: {}, seasonBuys: {}, home: 'dorm', car: null,
     fam: { partner: null, kids: [], happy: 60 }, skills: legend ? ['legend'] : monster ? ['monster'] : [],
@@ -573,7 +573,7 @@ export function startTurn(C) { C.act = null; C.evq = []; C.evi = 0; C.evr = null
 export function confirmAction(C) {
   const p = C.p; const q = [];
   if (p.flags.surgery) { q.push('sp:surgery'); }
-  const fateAge = p.kind === 'horse' ? 4 : 30;
+  const fateAge = p.kind === 'horse' ? 4 : 28;
   if (!q.length && p.age >= fateAge && !p.flags.fate && stageOf(p) === (p.kind === 'horse' ? 'tc' : 'pro')) { p.flags.fate = 1; q.push(p.kind === 'horse' ? 'sp:fateH' : 'sp:fateJ'); }
   if (!q.length) {
     if (Math.random() < 0.72) { const id = pickEvents(p, 1)[0]; if (id) q.push(id); }
@@ -707,10 +707,10 @@ export function buildOffers(C) {
       X.list = X.list.slice(0, 4);
       X.free = p.eval >= 55 && !p.free;
       X.stayFree = p.free;
-      X.canRetire = p.age >= 33;
-      X.forced = p.age >= 45;
+      X.canRetire = p.age >= 30;
+      X.forced = p.age >= 40;
       if (X.forced) { X.list = []; X.free = false; X.stayFree = false; }
-      X.note = X.forced ? '45歳。長い騎手人生に区切りをつける時が来た。' : '来年の所属を決める。フリーになると評価しだいで騎乗依頼が大きく変わる。';
+      X.note = X.forced ? '40歳。騎手人生に区切りをつける時が来た。' : '来年の所属を決める。フリーになると評価しだいで騎乗依頼が大きく変わる。';
     }
   }
   C.offers = X; C.screen = 'offers';

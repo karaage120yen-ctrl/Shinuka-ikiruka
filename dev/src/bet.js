@@ -1,5 +1,5 @@
 // ===== 賭け（馬券）のしくみ：実際のJRAの券種・枠番・払戻率にそろえる =====
-import { APT_FACTOR, COND_SPEED, GRADED, SIRE, SILKS, COAT, clamp, NAME_A, NAME_B } from './data.js';
+import { APT_FACTOR, COND_SPEED, GRADED, SIRE, SILKS, COAT, clamp, NAME_A, NAME_B, HORSE_NAMES } from './data.js';
 import { hashStr, simulateField, rollWeather } from './sim.js';
 
 export const FRAME_COLORS = ['#ffffff', '#222222', '#e8332b', '#2a6bd8', '#f2d22e', '#2a9a4a', '#f08a24', '#f39ac0'];
@@ -94,7 +94,7 @@ function makeField(r, R) {
     const style = ['逃げ', '先行', '先行', '差し', '差し', '追込'][Math.floor(R() * 6)];
     const prev = r.cls === '新馬' ? null : Math.max(1, Math.round(1 + R() * 12));
     out.push({
-      num: i + 1, name: (() => { let n = NAME_A[Math.floor(R() * NAME_A.length)] + NAME_B[Math.floor(R() * NAME_B.length)]; if (n.length > 9) n = n.slice(0, 9); return n; })(), sex, age, kin, wt, dw, jname: jn, jlv: jl, sire: SIRE[Math.floor(R() * SIRE.length)],
+      num: i + 1, name: (() => { for (let t = 0; t < 20; t++) { let n = R() < 0.5 ? HORSE_NAMES[Math.floor(R() * HORSE_NAMES.length)] : NAME_A[Math.floor(R() * NAME_A.length)] + NAME_B[Math.floor(R() * NAME_B.length)]; if (n.length > 9) n = n.slice(0, 9); if (!out.some(o => o.name === n)) return n; } return 'ナナシ' + (i + 1); })(), sex, age, kin, wt, dw, jname: jn, jlv: jl, sire: SIRE[Math.floor(R() * SIRE.length)],
       h: s, j, apt, cond, style, prev, coat: Math.floor(R() * COAT.length), silk: SILKS[Math.floor(R() * SILKS.length)],
     });
   }
