@@ -266,7 +266,7 @@ export class RaceView {
     const blob = new THREE.MeshBasicMaterial({ map: blobTex(), transparent: true, depthWrite: false });
     for (const r of this.race.racers) {
       const coat = COAT[r.coat ?? 0];
-      const H = buildHorse(coat, r.silk ?? 0xffffff, r.num, { shadow: true });
+      const H = buildHorse(coat, r.silk ?? 0xffffff, r.num, { shadow: true, cap: r.cap });
       const sh = new THREE.Mesh(new THREE.PlaneGeometry(3.0, 1.2), blob);
       sh.rotation.x = -Math.PI / 2; sh.position.y = 0.03; H.root.add(sh);
       this.scene.add(H.root);

@@ -1,5 +1,5 @@
 // ===== レース画面（操作・HUD・結果） =====
-import { createRace, stepRace, makeOpponents, marginText, trackPos, TRACK } from './sim.js';
+import { createRace, stepRace, makeOpponents, marginText, trackPos, TRACK, setSimSeed, fieldResult } from './sim.js';
 import { RaceView } from './render3d.js';
 import { fmtTime, SILKS } from './data.js';
 import * as A from './audio.js';
@@ -19,7 +19,7 @@ export function startRace(cfg) {
     <canvas id="minimap" width="220" height="130"></canvas>
     <button id="h-view" class="hud-small">視点</button>
     <button id="h-quit" class="hud-small hud-quit">中止</button>
-    <div id="h-msg" class="hud-msg"></div><div id="side-l" class="side l"></div><div id="side-r" class="side r"></div>
+    <div id="h-msg" class="hud-msg"></div><div id="h-msg2" class="hud-top3"></div><div id="side-l" class="side l"></div><div id="side-r" class="side r"></div>
     <div class="hud-bottom">
       <div class="gauge-wrap"><div class="gauge-label"><span>体力</span><span id="h-speed">0 km/h</span></div><div class="gauge"><div id="h-gauge"></div></div></div>
       <div class="ctrl">
@@ -31,13 +31,22 @@ export function startRace(cfg) {
   root.classList.remove('hidden');
   document.body.classList.add('in-race');
 
-  const pSpec = { ...cfg.player, isPlayer: true, silk: SILKS[cfg.player.silk ?? 0] };
-  const n = cfg.fieldSize || 12;
-  const opps = cfg.opponents ? [...cfg.opponents] : [];
-  if (opps.length < n - 1) opps.push(...makeOpponents(cfg.race, pSpec, n - 1 - opps.length));
-  const race = createRace({ dist: cfg.race.dist, surf: cfg.race.surf, specs: [pSpec, ...opps] });
+  const SPEC = !!cfg.spectate;
+  let race;
+  if (SPEC) {
+    setSimSeed(cfg.seed);
+    const specs = cfg.specs.map((x, i) => i === (cfg.focus || 0) ? { ...x, isPlayer: true, ai: true } : { ...x });
+    race = createRace({ dist: cfg.race.dist, surf: cfg.race.surf, specs, fixedGates: true, noBand: true });
+    root.classList.add('spectate');
+  } else {
+    const pSpec = { ...cfg.player, isPlayer: true, silk: SILKS[cfg.player.silk ?? 0] };
+    const n = cfg.fieldSize || 12;
+    const opps = cfg.opponents ? [...cfg.opponents] : [];
+    if (opps.length < n - 1) opps.push(...makeOpponents(cfg.race, pSpec, n - 1 - opps.length));
+    race = createRace({ dist: cfg.race.dist, surf: cfg.race.surf, specs: [pSpec, ...opps] });
+  }
   const lowPower = /iPhone|iPad|Android/i.test(navigator.userAgent) && (navigator.hardwareConcurrency || 4) <= 4;
-  const view = new RaceView(document.getElementById('race-canvas'), race, { view: S.settings.view || 'fp', title: cfg.race.name, lowPower });
+  const view = new RaceView(document.getElementById('race-canvas'), race, { view: SPEC ? 'tv' : (S.settings.view || 'fp'), title: cfg.race.name, lowPower });
   A.initAudio(); A.setSound(S.settings.sound); A.startCrowd(); A.crowdLevel(0.05);
 
   const input = { steer: 0, whip: false, l: false, r: false };
@@ -60,7 +69,7 @@ export function startRace(cfg) {
   const views = ['fp', 'back', 'tv'];
   const viewNames = { fp: '騎手視点', back: '後ろから', tv: '中継' };
   $('h-view').textContent = viewNames[view.view] || '視点';
-  $('h-view').onclick = () => { const v = views[(views.indexOf(view.view) + 1) % views.length]; view.setView(v); S.settings.view = v; save(); $('h-view').textContent = viewNames[v]; };
+  $('h-view').onclick = () => { const v = views[(views.indexOf(view.view) + 1) % views.length]; view.setView(v); if (!SPEC) { S.settings.view = v; save(); } $('h-view').textContent = viewNames[v]; };
   let quit = false;
   $('h-quit').onclick = () => { if (confirm('レースを中止しますか？（出走しなかったことになります）')) { quit = true; finish(null); } };
 
@@ -103,6 +112,9 @@ export function startRace(cfg) {
       else if (ev.type === 'mark') {
         const t = { 1000: '残り1000m', 600: '残り600m　そろそろ勝負！', 400: '残り400m！ ムチで追え！', 200: '残り200m！' }[ev.m];
         say(t, 1.6); if (ev.m <= 400) A.crowdLevel(ev.m === 200 ? 0.5 : 0.35);
+      } else if (ev.type === 'finish' && SPEC) {
+        if (ev.r.pos === 1) { say(`1着は ${ev.r.num}番 ${ev.r.name}！`, 3.5, 'big win'); A.fanfare(); }
+        if (race.finishedCount === race.racers.length) { ended = true; endT = 1.5; }
       } else if (ev.type === 'finish' && ev.r.isPlayer) {
         const pos = ev.r.pos;
         say(pos === 1 ? '1着！！ 勝った！' : `${pos}着でゴール`, 4, pos === 1 ? 'big win' : 'big');
@@ -126,8 +138,9 @@ export function startRace(cfg) {
     gEl.style.background = ratio > 0.5 ? '#3ddc84' : ratio > 0.2 ? '#ffc93d' : '#ff4d4d';
     $('h-speed').textContent = Math.round(pl.v * 3.6) + ' km/h' + (pl.whipT > 0 ? ' ⚡' : '');
     $('b-whip').classList.toggle('cool', pl.whipCool > 0);
-    if (pl.blocked && !pl.finished) { blockedT += dt; if (blockedT > 0.8 && msgT <= 0) say('前が詰まっている！ 左右に動け！', 1.3, 'warn'); } else blockedT = 0;
-    if (ratio <= 0 && !pl.finished && msgT <= 0 && race.started) say('スタミナ切れ…！', 1.2, 'warn');
+    if (SPEC) { const top = [...race.racers].sort((a, b) => (a.rank || 99) - (b.rank || 99)).slice(0, 3); $('h-msg2').innerHTML = top.map((r, i) => `<span><small>${i + 1}</small>${r.num}</span>`).join(''); }
+    if (!SPEC && pl.blocked && !pl.finished) { blockedT += dt; if (blockedT > 0.8 && msgT <= 0) say('前が詰まっている！ 左右に動け！', 1.3, 'warn'); } else blockedT = 0;
+    if (!SPEC && ratio <= 0 && !pl.finished && msgT <= 0 && race.started) say('スタミナ切れ…！', 1.2, 'warn');
     msgT -= dt; if (msgT <= 0) msgEl.classList.remove('show');
     drawMap();
     // 横に馬がいるときは画面のはしを光らせる
@@ -145,7 +158,7 @@ export function startRace(cfg) {
       endT += dt * SPEED;
       if (endT > 3.2 && !$('h-result').dataset.shown) showResult();
     }
-    raf = requestAnimationFrame(loop);
+    if (ended !== 'done') raf = requestAnimationFrame(loop);
   };
   raf = requestAnimationFrame(loop);
 
@@ -160,6 +173,7 @@ export function startRace(cfg) {
 
   function showResult() {
     const el = $('h-result'); el.dataset.shown = '1';
+    if (SPEC) { setSimSeed(null); finish({ list: fieldResult(race) }); return; }
     const list = results();
     const me = list.find(x => x.isPlayer);
     const rows = list.map(x => `<tr class="${x.isPlayer ? 'me' : ''}"><td>${x.pos}</td><td><span class="num" style="background:#${(x.silk ?? 0xffffff).toString(16).padStart(6, '0')}">${x.num}</span></td><td>${x.name}<small>${x.jname || ''}</small></td><td>${fmtTime(x.time)}</td><td>${x.margin}</td></tr>`).join('');
@@ -176,7 +190,8 @@ export function startRace(cfg) {
     window.removeEventListener('keydown', kd); window.removeEventListener('keyup', ku);
     A.stopCrowd();
     view.dispose();
-    root.classList.add('hidden'); root.innerHTML = '';
+    root.classList.add('hidden'); root.classList.remove('spectate'); root.innerHTML = '';
+    if (SPEC) setSimSeed(null);
     document.body.classList.remove('in-race');
     active = null;
     cfg.onDone && cfg.onDone(quit ? null : res);

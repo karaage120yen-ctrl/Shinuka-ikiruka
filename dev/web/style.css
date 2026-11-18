@@ -313,3 +313,45 @@ table.st td { padding: 8px 4px; border-bottom: 1px solid var(--line); font-weigh
 .autobar { position: fixed; right: 12px; bottom: calc(var(--safe-b) + 14px); display: flex; gap: 6px; z-index: 20; }
 .autobar button { border-radius: 999px; padding: 8px 12px; font-size: 13px; opacity: .92; font-weight: 900; background: #0d211a; border: 1px solid var(--line); box-shadow: 0 4px 14px rgba(0,0,0,.5); }
 .ab-auto.on { background: var(--red); border-color: #ff7a6e; }
+
+#race-screen.spectate .ctrl { display: none; }
+#race-screen.spectate .gauge-wrap { display: none; }
+.hud-top3 { position: absolute; left: 8px; top: calc(var(--safe-t) + 96px); display: flex; gap: 4px; pointer-events: none; }
+.hud-top3:empty { display: none; }
+.hud-top3 span { background: rgba(0,0,0,.6); border-radius: 8px; padding: 2px 8px; font-weight: 900; font-size: 18px; }
+.hud-top3 small { font-size: 10px; color: var(--gold); margin-right: 3px; }
+
+/* ===== 賭け ===== */
+.betday { display: flex; justify-content: space-between; align-items: center; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; margin-top: 8px; }
+.betday b { display: block; font-size: 16px; } .betday span { font-size: 12px; color: var(--mu); } .betday .room { font-size: 13px; color: var(--gold); }
+.coinbar { border: 1px solid var(--line); border-radius: 14px; margin-top: 10px; background: var(--card); }
+.rules { display: flex; flex-direction: column; gap: 6px; }
+.rules div { display: grid; grid-template-columns: 60px 1fr; gap: 2px 8px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font-size: 13px; }
+.rules b { grid-row: span 2; align-self: center; color: var(--gold); } .rules em { font-style: normal; font-size: 11px; color: var(--mu); }
+.tgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.tbtn2 { padding: 10px 2px; border-radius: 12px; background: var(--card); border: 1px solid var(--line); font-weight: 900; font-size: 14px; }
+.tbtn2 small { display: block; color: var(--gold); font-size: 10px; font-weight: 500; } .tbtn2.on { background: #24463b; border-color: var(--gold); color: var(--gold); }
+.slots { display: flex; flex-direction: column; gap: 6px; }
+.slot { display: flex; align-items: center; gap: 10px; background: var(--card); border: 1px dashed #3a6a5a; border-radius: 12px; padding: 8px 10px; min-height: 44px; }
+.slot.on { border-style: solid; border-color: var(--gold); } .slot small { width: 64px; color: var(--mu); font-size: 12px; flex: none; }
+.slot div { display: flex; flex-wrap: wrap; gap: 4px; } .slot .ph { color: #5a7a6a; font-size: 12px; }
+.fbox { display: inline-flex; width: 26px; height: 26px; border-radius: 6px; align-items: center; justify-content: center; font-weight: 900; font-size: 14px; border: 1px solid rgba(0,0,0,.35); flex: none; }
+.hlist { display: flex; flex-direction: column; gap: 4px; }
+.hrow { display: grid; grid-template-columns: 24px 30px 1fr auto; gap: 8px; align-items: center; text-align: left; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; width: 100%; }
+.hrow.on { border-color: var(--gold); background: #24463b; box-shadow: inset 0 0 0 1px var(--gold); }
+.hrow .mk { font-weight: 900; color: var(--red); font-size: 15px; text-align: center; }
+.hrow .hn b { display: block; font-size: 15px; } .hrow .hn small { display: block; font-size: 11px; color: var(--mu); }
+.hrow .od { text-align: right; } .hrow .od b { display: block; font-size: 17px; color: var(--gold); } .hrow .od small { font-size: 10px; color: var(--mu); }
+.framepick { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 8px; }
+.fbtn { border-radius: 10px; padding: 8px 4px; font-weight: 900; border: 1px solid rgba(0,0,0,.4); } .fbtn small { display: block; font-size: 10px; font-weight: 500; }
+.buybox { display: grid; grid-template-columns: repeat(3, 1fr); background: #0d211a; border: 1px solid var(--line); border-radius: 14px; margin-top: 12px; }
+.buybox div { padding: 10px 6px; text-align: center; border-right: 1px solid var(--line); } .buybox div:last-child { border-right: 0; }
+.buybox span { display: block; font-size: 11px; color: var(--mu); } .buybox b { font-size: 16px; }
+.tickets { display: flex; flex-direction: column; gap: 6px; }
+.ticket { display: flex; justify-content: space-between; align-items: center; gap: 8px; background: #f3efe4; color: #1a1a1a; border-radius: 10px; padding: 8px 12px; border-left: 6px solid #2a9a4a; }
+.ticket b { margin-right: 8px; } .ticket span { font-weight: 800; } .ticket small { display: block; font-size: 11px; color: #555; }
+.ticket .x { background: #e8e1cf; border-radius: 8px; padding: 6px 10px; font-size: 12px; }
+.ticket.hit { border-left-color: #e0a800; background: #fff6d8; } .ticket.miss { opacity: .7; border-left-color: #999; }
+.ticket em { font-style: normal; font-weight: 900; } .ticket.hit em { color: #b4251e; }
+table.pay td div { display: flex; gap: 8px; align-items: baseline; } table.pay td span { min-width: 64px; } table.pay td b { color: var(--gold); } table.pay td small { color: var(--mu); font-size: 11px; }
+table.rank tr.me th, table.rank tr.me td { color: var(--gold); } table.rank td small { color: var(--mu); font-weight: 400; margin-left: 4px; }

@@ -33,5 +33,5 @@ function run(kind) {
   const card = K.toCard(p);
   return { kind, turns, age: p.age, ovr: K.ovrOf(p), rec: p.record.join('-'), wins: p.wins, g: p.gradedWins, g1: p.g1Wins, earn: Math.round(p.earnings), rank: card.rank, why: p.fate && p.fate.why, skills: p.skills.join(',') };
 }
-for (let i = 0; i < 4; i++) console.log(JSON.stringify(run('horse')));
-for (let i = 0; i < 2; i++) console.log(JSON.stringify(run('jockey')));
+for (let i = 0; i < 2; i++) console.log(JSON.stringify(run('horse')));
+for (let i = 0; i < 5; i++) console.log(JSON.stringify(run('jockey')));

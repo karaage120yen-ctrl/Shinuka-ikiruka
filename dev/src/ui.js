@@ -4,6 +4,7 @@ import { H_KEYS, H_NAMES, J_KEYS, J_NAMES, COND_NAMES, COND_COLORS, COAT, SILKS,
 import { S, save, newId, resetAll, findJockey } from './store.js';
 import { NPC_JOCKEY } from './jockey.js';
 import { openCareer } from './careerui.js';
+import { openBet } from './betui.js';
 import { stageOf } from './career.js';
 import { startRace } from './racescreen.js';
 import { pull, COST_1, COST_10, GACHA_POOL, RATES } from './gacha.js';
@@ -58,6 +59,7 @@ export function home() {
     <div class="menu">
       <button class="mbtn big" data-act="horse">🐎 馬を育てる${ah && ah.p ? `<small>続き：${esc(ah.p.name)}（${ah.p.age}歳${ah.p.month}月）</small>` : '<small>生まれてから引退まで</small>'}</button>
       <button class="mbtn" data-act="jockey">🏇 騎手を育てる${aj && aj.p ? `<small>続き：${esc(aj.p.name)}（${aj.p.age}歳）</small>` : '<small>競馬学校から引退まで</small>'}</button>
+      <button class="mbtn" data-act="bet">🎫 競馬で賭ける<small>コインで馬券を買う・ルームで友達と勝負　🪙 ${(S.bet ? S.bet.coins : 10000).toLocaleString('ja-JP')}</small></button>
       <button class="mbtn" data-act="list">📖 一覧<small>育てた馬 ${S.horses.length}頭・騎手 ${S.jockeys.length}人</small></button>
       <button class="mbtn" data-act="gacha">🎰 ガチャ<small>キャラは準備中</small></button>
       <button class="mbtn" data-act="vs">⚔️ 対戦・レース<small>育てた馬で勝負</small></button>
@@ -65,7 +67,7 @@ export function home() {
     </div>
   </div>`);
   bind({ horse: () => openCareer('horse', home), jockey: () => openCareer('jockey', home),
-    list: () => listScreen('h'), gacha: gachaScreen, vs: vsScreen, settings: settingsScreen });
+    list: () => listScreen('h'), bet: () => openBet(home), gacha: gachaScreen, vs: vsScreen, settings: settingsScreen });
 }
 GO.home = home;
 

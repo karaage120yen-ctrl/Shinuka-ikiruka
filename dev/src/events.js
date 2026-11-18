@@ -1,3 +1,5 @@
+import { genHorse } from './events_gen_h.js';
+import { genJockey } from './events_gen_j.js';
 // ===== 育成の出来事（選んだ答えで成功・失敗が決まる） =====
 // k: 'horse' | 'jockey'   st: 段階（farm/ikusei/tc ・ school/pro）
 // ch: 選択肢 { l: 文, d: 補足, pr: 成功率(c)=>0〜1, ok: {m, fx}, ng: {m, fx} }
@@ -248,4 +250,12 @@ E.push({ k: 'jockey', st: JP, id: 'sp:fateJ', sp: 1, t: '運命の分岐点', x:
   { l: '乗り方を大きく変える', pr: P(0.5), ok: OK('一段上の騎手になった。見える景色が変わった。', { fate: 6 }), ng: OK('迷いが出て、成績を落としてしまった。', { fate: -2 }) },
   { l: '今のスタイルを磨く', pr: P(1), ok: OK('信じた道を進む。', { cond: 4 }), ng: OK('', {}) }] });
 
+// 体力（hp）と能力のスタミナ（sta）を区別する
+for (const e of E) for (const ch of e.ch) for (const r of [ch.ok, ch.ng]) {
+  const f = r && r.fx; if (!f || typeof f !== 'object' || f.sta == null) continue;
+  if (e.k === 'jockey' || Math.abs(f.sta) >= 4) { f.hp = (f.hp || 0) + f.sta; delete f.sta; }
+}
+genHorse(E);
+genJockey(E);
 export const EVENTS = E;
+export const EVENT_COUNT = { horse: E.filter(e => e.k === 'horse').length, jockey: E.filter(e => e.k === 'jockey').length };

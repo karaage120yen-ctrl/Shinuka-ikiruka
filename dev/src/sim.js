@@ -1,5 +1,16 @@
 // ===== レースの物理シミュレーション（描画とは別） =====
-import { APT_FACTOR, COND_SPEED, rnd, clamp, lerp, pick, randomHorseName, randomJockeyName, SILKS, COAT } from './data.js';
+import { APT_FACTOR, COND_SPEED, clamp, lerp, randomHorseName, randomJockeyName, SILKS, COAT } from './data.js';
+
+// 乱数（ルームで同じ結果にするため、種から作れるようにする）
+let SR = Math.random;
+export function setSimSeed(seed) {
+  if (seed == null) { SR = Math.random; return; }
+  let x = (seed >>> 0) || 1;
+  SR = () => { x ^= x << 13; x >>>= 0; x ^= x >> 17; x ^= x << 5; x >>>= 0; return x / 4294967296; };
+}
+export function hashStr(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+const rnd = (a, b) => a + SR() * (b - a);
+const pick = (arr) => arr[Math.floor(SR() * arr.length)];
 
 export const TRACK = { Ls: 500, R: 160, width: 26, finishU: 400 };
 TRACK.P = 2 * TRACK.Ls + 2 * Math.PI * TRACK.R;
@@ -37,8 +48,10 @@ export function makeRacer(spec) {
   const apt = APT_FACTOR[spec.apt] ?? 1;
   const cf = COND_SPEED[spec.cond ?? 2];
   const hs = spec.hsk || [], js = spec.jsk || [];
-  const top = (16.55 + 0.022 * h.spd) * apt * cf * (spec.tired ? 0.985 : 1);
-  const cap = (1100 + 24 * h.sta) * (hs.includes('stayer') ? 1.06 : 1);
+  // その日の出来（ゆらぎ）。強い馬でも負けることがある
+  const form = 1 + (SR() + SR() + SR() - 1.5) * 0.016;
+  const top = (16.55 + 0.022 * h.spd) * apt * cf * (spec.tired ? 0.985 : 1) * form;
+  const cap = (1100 + 24 * h.sta) * (hs.includes('stayer') ? 1.06 : 1) * (1 + (SR() - 0.5) * 0.08);
   const R = {
     ...spec,
     top, cap, energy: cap,
@@ -54,7 +67,7 @@ export function makeRacer(spec) {
     laneWant: STYLE_LANE[spec.style] ?? 2,
     u: 0, p: 0, d: 0, v: 0, whipT: 0, whipCool: 0, whips: 0, finished: false, finishTime: 0,
     gateDelay: rnd(0.02, 0.38) * (1.25 - (h.wis + j.jud) / 260),
-    blocked: false, stride: Math.random() * 10, aiTimer: Math.random() * 0.3, aiWhipT: 0, bump: 0,
+    blocked: false, stride: SR() * 10, aiTimer: SR() * 0.3, aiWhipT: 0, bump: 0,
   };
   // 特殊能力
   if (hs.includes('nige')) R.cruise += 0.006;
@@ -87,7 +100,7 @@ export function makeOpponents(race, playerSpec, n, opts = {}) {
     const j = { tec: jl, whip: jl + rnd(-8, 8), bal: jl + rnd(-8, 8), fit: jl + rnd(-8, 8), jud: jl + rnd(-8, 8) };
     list.push({
       name: randomHorseName(), jname: randomJockeyName(), h, j, apt: pick(['A', 'A', 'A', 'B', 'B']), cond: pick([1, 2, 2, 2, 3, 3]),
-      style: pick(styles), coat: Math.floor(Math.random() * COAT.length), silk: SILKS[(i * 5 + 3) % SILKS.length],
+      style: pick(styles), coat: Math.floor(SR() * COAT.length), silk: SILKS[(i * 5 + 3) % SILKS.length],
     });
   }
   return list;
@@ -98,9 +111,9 @@ export function createRace(cfg) {
   const u0 = TRACK.finishU - cfg.dist;
   const racers = cfg.specs.map((s, i) => makeRacer(s));
   // ゲート番号をランダムに
-  const gates = racers.map((_, i) => i).sort(() => Math.random() - 0.5);
+  const gates = cfg.fixedGates ? racers.map((_, i) => i) : racers.map((_, i) => i).map(i => [SR(), i]).sort((a, b) => a[0] - b[0]).map(x => x[1]);
   racers.forEach((r, i) => { r.gate = gates[i] + 1; r.u = u0; r.d = 1.1 + gates[i] * 1.25; r.num = gates[i] + 1; });
-  return { dist: cfg.dist, surf: cfg.surf, u0, racers, t: 0, started: false, countdown: 3.2, finishedCount: 0, order: [], player: racers.find(r => r.isPlayer) || null, events: [] };
+  return { dist: cfg.dist, surf: cfg.surf, u0, racers, t: 0, started: false, countdown: 3.2, finishedCount: 0, order: [], player: racers.find(r => r.isPlayer) || null, events: [], noBand: !!cfg.noBand };
 }
 
 function sustainSpeed(r, remaining, whipping) {
@@ -146,7 +159,7 @@ export function stepRace(race, dt, input) {
         if (wantWhip && r.aiWhipT <= 0 && vs > r.top * 0.97) { doWhip(r, race); r.aiWhipT = rnd(0.45, 0.9); whipping = true; }
       }
       // 接戦になるよう少しだけ調整
-      if (pl && !pl.finished && rem < 900 && !r.finished) {
+      if (pl && !race.noBand && !pl.finished && rem < 900 && !r.finished) {
         const gap = r.p - pl.p;
         if (gap > 3) target -= 0.16 * Math.min(1, (gap - 3) / 8);
         else if (gap < -4 && gap > -40) target += 0.06;
@@ -285,4 +298,19 @@ export function simulateRace(cfg) {
   const list = all.map((x, i) => ({ pos: i + 1, name: x.r.name, jname: x.r.jname, num: x.r.num, time: x.time, isPlayer: !!x.r.isPlayer, margin: i === 0 ? '' : marginText(x.time - all[i - 1].time, 16.5), silk: x.r.silk }));
   const me = list.find(x => x.isPlayer);
   return { pos: me.pos, field: list.length, time: me.time, whips: race.player.whips, list, jname: cfg.player.jname, auto: true };
+}
+
+// 出走馬を全部指定して結果だけ出す（賭け用）
+export function simulateField(specs, race, seed, dt = 1 / 60) {
+  if (seed != null) setSimSeed(seed);
+  const R = createRace({ dist: race.dist, surf: race.surf, specs, fixedGates: true, noBand: true });
+  R.countdown = 0; R.started = true;
+  let t = 0;
+  while (R.finishedCount < R.racers.length && t < 400) { stepRace(R, dt, null); t += dt; R.events.length = 0; }
+  setSimSeed(null);
+  return fieldResult(R);
+}
+export function fieldResult(R) {
+  const all = R.racers.map(r => ({ r, time: r.finished ? r.finishTime : R.t + (R.dist - r.p) / Math.max(10, r.v) })).sort((a, b) => a.time - b.time);
+  return all.map((x, i) => ({ pos: i + 1, num: x.r.num, name: x.r.name, jname: x.r.jname, time: x.time, margin: i === 0 ? '' : marginText(x.time - all[i - 1].time, 16.5) }));
 }

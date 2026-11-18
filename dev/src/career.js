@@ -16,7 +16,7 @@ export const KIND = {
   },
   jockey: {
     keys: J_KEYS, names: J_NAMES, w: { tec: 1.2, whip: 1, bal: 1, fit: 0.8, jud: 1 },
-    turns: [1, 4, 7, 10], len: 3, rate: 0.017,
+    turns: [1, 4, 7, 10], len: 3, rate: 0.015,
     evalName: '騎乗依頼の評価', popName: '人気', moneyName: '所持金',
   },
 };
@@ -250,6 +250,8 @@ const INJ_J = [[2, 8, ['打撲', '手首のねんざ', '肋骨のひび', '肩�
 export function applyFx(p, fx) {
   const out = []; const K = KIND[p.kind];
   for (const [k, v] of Object.entries(fx || {})) {
+    if (v === 0 || v == null) continue;
+    if (k === 'hp') { p.sta = clamp(p.sta + v, 0, 100); out.push(['体力', v]); continue; }
     if (K.keys.includes(k)) { stAdd(p, k, v); out.push([K.names[k], v]); }
     else if (k === 'key') { const kk = p.focus === 'all' ? pick(K.keys) : p.focus; stAdd(p, kk, v); out.push([K.names[kk], v]); }
     else if (k === 'all') { for (const s of K.keys) stAdd(p, s, v); out.push(['全能力', v]); }
@@ -297,13 +299,13 @@ export function prOf(ch, c) {
   if (has(c.p, 'g1man')) v += 0.05;
   return clamp(v, 0.05, 0.95);
 }
-const JIT = ['spd', 'sta', 'pow', 'gut', 'wis', 'tec', 'whip', 'bal', 'fit', 'jud', 'key', 'all', 'pop', 'eval', 'cond', 'money', 'love', 'fam'];
+const JIT = ['hp', 'spd', 'sta', 'pow', 'gut', 'wis', 'tec', 'whip', 'bal', 'fit', 'jud', 'key', 'all', 'pop', 'eval', 'cond', 'money', 'love', 'fam'];
 export function jitterFx(fx, big, p) {
   if (!fx) return fx; const o = {};
   for (const [k, v] of Object.entries(fx)) {
     if (typeof v !== 'number' || !JIT.includes(k) || (k === 'sta' && false)) { o[k] = v; continue; }
     let x = v;
-    if (['pop', 'eval', 'cond', 'love', 'fam'].includes(k)) x = v * (0.6 + Math.random() * 0.9);
+    if (['pop', 'eval', 'cond', 'love', 'fam', 'hp'].includes(k)) x = v * (0.6 + Math.random() * 0.9);
     else if (k === 'money' && v > 0) x = v * (0.7 + Math.random() * 0.8);
     if (big === 'great' && x > 0) x *= 2; if (big === 'bad' && x < 0) x *= 1.6;
     x = Math.round(x); if (x === 0) x = Math.sign(v); o[k] = x;
@@ -410,12 +412,12 @@ export function monthlyCost(p) {
 function jockeyRides(p, a, res, m) {
   if (p.stage !== 'pro' || p.inj > 0 || a.norides) return;
   const S = stableOf(p), rep = S ? S.rep : 40;
-  let rides = 8 + p.eval * 0.35 + (p.free ? p.pop * 0.2 : rep * 0.15);
+  let rides = 6 + p.eval * 0.25 + (p.free ? p.pop * 0.16 : rep * 0.12);
   if (a.id === 'rest' || a.id === 'family') rides *= 0.6;
   if (p.subs.agent) rides *= 1.2;
   rides = Math.max(0, Math.round(rides * rnd(0.85, 1.15)));
   const o = ovrOf(p);
-  const pw = clamp(0.02 + Math.max(0, o - 35) * 0.003 + (p.eval - 50) * 0.0006 + (rep - 50) * 0.0008 + (p.cond - 60) * 0.0003, 0.01, 0.25);
+  const pw = clamp(0.015 + Math.max(0, o - 40) * 0.0025 + (p.eval - 50) * 0.0005 + (rep - 50) * 0.0006 + (p.cond - 60) * 0.0002, 0.01, 0.2);
   let w = 0, s2 = 0, s3 = 0;
   for (let i = 0; i < rides; i++) { const x = Math.random(); if (x < pw) w++; else if (x < pw * 1.85) s2++; else if (x < pw * 2.6) s3++; }
   const inc = Math.round(rides * 2.6 + w * 45 + s2 * 18 + s3 * 11);
@@ -423,10 +425,10 @@ function jockeyRides(p, a, res, m) {
   p.money += inc; p.earnings += inc;
   res.rides += rides; res.w += w; res.inc += inc;
   p.cond = clamp(p.cond + (w / Math.max(1, rides) - pw) * 40, 0, 100);
-  p.eval = clamp(p.eval + (w - rides * 0.08) * 0.05 + (o + 8 - p.eval) * 0.05, 0, 100);
+  p.eval = clamp(p.eval + (w - rides * 0.08) * 0.04 + (o - p.eval) * 0.06, 0, 100);
   // 重賞（大一番以外の自動騎乗）
-  if (a.id !== 'bigrace' && p.eval >= 50) for (const r of GRADED) if (r.m === m && Math.random() < (p.eval - 50) / 100) {
-    const pg = pw * (r.g === 'G1' ? 0.35 : r.g === 'G2' ? 0.5 : 0.6);
+  if (a.id !== 'bigrace' && p.eval >= 50) for (const r of GRADED) if (r.m === m && Math.random() < (p.eval - 55) / 120) {
+    const pg = pw * (r.g === 'G1' ? 0.3 : r.g === 'G2' ? 0.45 : 0.55);
     if (Math.random() < pg) {
       p.gradedWins++; if (r.g === 'G1') p.g1Wins++;
       const hn = randomHorseName();
@@ -708,7 +710,7 @@ export function buildOffers(C) {
   C.offers = X; C.screen = 'offers';
 }
 
-export function ridesEstimate(p, rep, free) { return Math.round(8 + p.eval * 0.35 + (free ? p.pop * 0.2 : rep * 0.15)); }
+export function ridesEstimate(p, rep, free) { return Math.round(6 + p.eval * 0.25 + (free ? p.pop * 0.16 : rep * 0.12)); }
 
 export function pickOffer(C, kind, v) {
   const p = C.p;
