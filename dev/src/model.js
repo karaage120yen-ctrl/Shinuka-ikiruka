@@ -1,10 +1,10 @@
 // ===== 馬と騎手の3Dモデル（プログラムで組み立て） =====
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { coatTex, clothTex } from './textures.js';
+import { coatTex, clothTex, maneTex } from './textures.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
-let COAT_MAP = null;
+let COAT_MAP = null, MANE_MAP = null;
 
 function g(geom, pos, rotZ = 0, scale, rotX = 0, rotY = 0) {
   const m = new THREE.Matrix4();
@@ -53,15 +53,22 @@ function horseGeos() {
     g(new THREE.ConeGeometry(0.035, 0.16, 8), E.clone().add(V(-0.04, 0.17, 0.065)), -0.25, null, 0.15),
     g(new THREE.ConeGeometry(0.035, 0.16, 8), E.clone().add(V(-0.04, 0.17, -0.065)), -0.25, null, -0.15),
   ].map(NI));
-  // たてがみ：細い板を何枚も並べる
-  const maneParts = [];
-  for (let i = 0; i < 12; i++) {
-    const t = 0.08 + i * 0.075;
-    const pz = (i % 2 ? 0.03 : -0.03);
-    maneParts.push(g(new THREE.BoxGeometry(0.09, 0.14 + (i % 3) * 0.03, 0.03), V(Math.cos(alpha) * t - Math.sin(alpha) * 0.2, Math.sin(alpha) * t + Math.cos(alpha) * 0.2, pz), alpha - 0.6));
+  // たてがみ：首すじに沿って垂れる毛の帯（毛すじの画像を貼る）
+  const mp = [], mu = [], mi = [];
+  const NM = 16;
+  for (let i = 0; i <= NM; i++) {
+    const t = 0.02 + (i / NM) * 0.9;
+    const cx = Math.cos(alpha) * t - Math.sin(alpha) * (0.24 - t * 0.09), cy = Math.sin(alpha) * t + Math.cos(alpha) * (0.24 - t * 0.09);
+    const len = 0.2 + Math.sin(i / NM * Math.PI) * 0.06;
+    // 上の端（首すじ）と下の端（右側に垂れる）
+    mp.push(cx, cy + 0.015, 0.0, cx + 0.03, cy - len * 0.9, 0.17 - t * 0.035);
+    mu.push(i / NM, 0, i / NM, 1);
   }
-  maneParts.push(g(new THREE.BoxGeometry(0.12, 0.1, 0.05), E.clone().add(V(-0.02, 0.16, 0)), 0.6)); // 前髪
-  const mane = mergeGeometries(maneParts.map(NI));
+  for (let i = 0; i < NM; i++) { const a0 = i * 2; mi.push(a0, a0 + 1, a0 + 2, a0 + 1, a0 + 3, a0 + 2); }
+  const maneG = new THREE.BufferGeometry();
+  maneG.setAttribute('position', new THREE.Float32BufferAttribute(mp, 3)); maneG.setAttribute('uv', new THREE.Float32BufferAttribute(mu, 2)); maneG.setIndex(mi); maneG.computeVertexNormals();
+  const forelock = g(new THREE.PlaneGeometry(0.14, 0.16), E.clone().add(V(0.02, 0.12, 0)), 0.5, null, 0, Math.PI / 2);
+  const mane = mergeGeometries([NI(maneG), NI(forelock)]);
   const eyes = mergeGeometries([
     g(new THREE.SphereGeometry(0.032, 8, 6), E.clone().add(V(0.1, -0.04, 0.115))),
     g(new THREE.SphereGeometry(0.032, 8, 6), E.clone().add(V(0.1, -0.04, -0.115))),
@@ -145,7 +152,8 @@ export function buildHorse(coat, silkColor, num, opts = {}) {
   const neckP = new THREE.Group(); neckP.position.set(0.58, 1.42, 0); bodyG.add(neckP);
   const neck = new THREE.Mesh(G.neck, coatMat); neckP.add(neck);
   neckP.add(new THREE.Mesh(G.ears, coatMat));
-  const mane = new THREE.Mesh(G.mane, maneMat); neckP.add(mane);
+  if (!MANE_MAP) MANE_MAP = maneTex();
+  const mane = new THREE.Mesh(G.mane, new THREE.MeshStandardMaterial({ color: coat.mane, map: MANE_MAP, alphaTest: 0.35, side: THREE.DoubleSide, roughness: 0.7 })); neckP.add(mane);
   neckP.add(new THREE.Mesh(G.eyes, mat(0x050505, { roughness: 0.2 })));
   // 白いメンコ（覆面）や手綱の鼻革
   const nose = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.018, 6, 14), mat(0x111111));
@@ -185,7 +193,7 @@ export function buildHorse(coat, silkColor, num, opts = {}) {
   const arms = new THREE.Mesh(J.arms, silk); jock.add(arms);
 
   root.traverse(o => { if (o.isMesh) { o.castShadow = !!opts.shadow; } });
-  const H = { root, bodyG, neckP, mane, legs, tailP, jock, torso, helmet, face, pants, boots, arms, silk, bit: G.bit.clone(), phase: 0 };
+  const H = { root, bodyG, neckP, mane, legs, tailP, jock, torso, helmet, face, pants, boots, arms, silk, bit: G.bit.clone(), phase: 0, coatMat, coatBase: coatMat.color.clone() };
   return H;
 }
 

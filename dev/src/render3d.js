@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { TRACK, trackPos, elev } from './sim.js';
 import { COAT } from './data.js';
 import { buildHorse, animateHorse } from './model.js';
-import { turfTex, dirtTex, grassTex, crowdTex, standingCrowdTex, buildingTex, textTex, blobTex, setMirror } from './textures.js';
+import { turfTex, dirtTex, grassTex, tuftTex, puffTex, crowdTex, standingCrowdTex, buildingTex, textTex, blobTex, setMirror } from './textures.js';
 
 const W = TRACK.width;
 const tmp = {};
@@ -47,14 +47,24 @@ function skyMesh(sunDir, sky) {
     vertexShader: `varying vec3 vDir; void main(){ vDir = normalize(position); vec4 p = modelViewMatrix*vec4(position,1.0); gl_Position = projectionMatrix*p; gl_Position.z = gl_Position.w; }`,
     fragmentShader: `uniform vec3 sunDir; uniform float cloud; uniform float night; uniform float dark; varying vec3 vDir;
       float h21(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
+      float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
+        return mix(mix(h21(i), h21(i+vec2(1,0)), f.x), mix(h21(i+vec2(0,1)), h21(i+vec2(1,1)), f.x), f.y); }
+      float fbm(vec2 p){ float v = 0.0, a = 0.5; for (int i = 0; i < 5; i++) { v += a*vn(p); p = p*2.03 + vec2(1.7, 9.2); a *= 0.5; } return v; }
       void main(){ float h = clamp(vDir.y, -0.1, 1.0);
         vec3 zen = vec3(0.16,0.38,0.78); vec3 hor = vec3(0.74,0.84,0.93);
         vec3 c = mix(hor, zen, pow(max(h,0.0), 0.55));
         float s = max(dot(normalize(vDir), sunDir), 0.0);
         c += vec3(1.0,0.9,0.7) * (pow(s, 400.0)*4.0 + pow(s, 12.0)*0.25) * (1.0 - cloud);
-        float cl = sin(vDir.x*9.0+vDir.z*3.0)*sin(vDir.z*11.0-vDir.x*4.0)*0.5+0.5;
-        cl = smoothstep(0.55 - cloud*0.5, 0.95, cl) * smoothstep(0.02, 0.25, h) * (1.0 - smoothstep(0.35 + cloud*0.6,0.7 + cloud*0.3,h));
-        c = mix(c, vec3(0.97,0.98,1.0), cl*0.75);
+        // 雲（空に貼った平面に投影してノイズで描く）
+        vec2 cp = vDir.xz / (h + 0.12) * 1.6;
+        float n = fbm(cp);
+        float cl = smoothstep(0.52 - cloud*0.32, 0.82 - cloud*0.2, n) * smoothstep(0.0, 0.18, h);
+        float shade = fbm(cp + sunDir.xz*0.25);
+        vec3 cc = mix(vec3(1.0,0.99,0.97), vec3(0.62,0.66,0.72), clamp((shade - n)*2.2 + 0.35 + cloud*0.3, 0.0, 1.0));
+        cc += vec3(1.0,0.85,0.6) * pow(s, 8.0) * 0.35;
+        c = mix(c, cc, cl*0.92);
+        // 地平線のかすみ
+        c = mix(c, vec3(0.86,0.89,0.92), (1.0 - smoothstep(0.0, 0.12, h))*0.55);
         c = mix(c, vec3(0.55,0.58,0.62), cloud*0.8);
         c *= 1.0 - dark;
         // 夜空
@@ -125,8 +135,9 @@ export class RaceView {
     S.add(new THREE.HemisphereLight(night ? 0x8090c0 : 0xd6e8ff, 0x52602f, hemiI));
     const sun = new THREE.DirectionalLight(night ? 0xdfe6ff : 0xfff0d8, night ? 0.9 : 2.6 * (1 - cloudy * 0.6));
     sun.castShadow = true;
-    sun.shadow.mapSize.set(1024, 1024);
-    const sc = sun.shadow.camera; sc.left = -28; sc.right = 28; sc.top = 28; sc.bottom = -28; sc.near = 1; sc.far = 220;
+    const hi = !this.opts.lowPower;
+    sun.shadow.mapSize.set(hi ? 2048 : 1024, hi ? 2048 : 1024);
+    const sc = sun.shadow.camera; sc.left = -30; sc.right = 30; sc.top = 30; sc.bottom = -30; sc.near = 1; sc.far = 220;
     sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.03;
     S.add(sun); S.add(sun.target); this.sun = sun;
 
@@ -138,10 +149,10 @@ export class RaceView {
     const isTurf = this.race.surf !== 'ダ';
     const tint = wet ? 0x9aa08a : wx === '雪' ? 0xf0f4f8 : 0xffffff;
     const tt = isTurf ? turfTex() : dirtTex();
-    const main = new THREE.Mesh(loopStrip(-1.5, W + 1.2, 0.01, 0.01, 2, 13, 2.1), new THREE.MeshStandardMaterial({ map: tt, color: isTurf ? tint : (wet ? 0x7a6a5a : tint), roughness: wet ? 0.45 : isTurf ? 0.85 : 1, metalness: wet ? 0.1 : 0 }));
+    const main = new THREE.Mesh(loopStrip(-1.5, W + 1.2, 0.01, 0.01, 2, 13, 2.1), new THREE.MeshStandardMaterial({ map: tt, bumpMap: tt.bump, bumpScale: isTurf ? 1.4 : 2.2, color: isTurf ? tint : (wet ? 0x7a6a5a : tint), roughness: wet ? 0.38 : isTurf ? 0.88 : 0.97, metalness: wet ? 0.12 : 0 }));
     main.receiveShadow = true; S.add(main);
     const it = isTurf ? dirtTex() : turfTex();
-    const inner = new THREE.Mesh(loopStrip(-26, -4, 0.008, 0.008, 3, 13, 1.7), new THREE.MeshStandardMaterial({ map: it, roughness: 1 }));
+    const inner = new THREE.Mesh(loopStrip(-26, -4, 0.008, 0.008, 3, 13, 1.7), new THREE.MeshStandardMaterial({ map: it, bumpMap: it.bump, bumpScale: 1.2, roughness: 1 }));
     inner.receiveShadow = true; S.add(inner);
     if (TRACK.base || elev(0) || elev(TRACK.P / 2)) {
       const grassM = new THREE.MeshStandardMaterial({ color: 0x4a7a32, roughness: 1, side: THREE.DoubleSide });
@@ -405,17 +416,69 @@ export class RaceView {
   }
 
   particles() {
-    const N = 700;
+    const N = 1400;
     const geo = new THREE.BufferGeometry();
-    this.pPos = new Float32Array(N * 3); this.pVel = new Float32Array(N * 3); this.pLife = new Float32Array(N);
+    this.pPos = new Float32Array(N * 3); this.pVel = new Float32Array(N * 3); this.pLife = new Float32Array(N); this.pCol = new Float32Array(N * 3);
     geo.setAttribute('position', new THREE.BufferAttribute(this.pPos, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(this.pCol, 3));
     const isTurf = this.race.surf !== 'ダ';
-    this.pts = new THREE.Points(geo, new THREE.PointsMaterial({ color: isTurf ? 0x4f6a2a : 0x8a6440, size: isTurf ? 0.07 : 0.09, sizeAttenuation: true }));
+    this.isTurf = isTurf;
+    this.pts = new THREE.Points(geo, new THREE.PointsMaterial({ vertexColors: true, size: isTurf ? 0.09 : 0.08, sizeAttenuation: true }));
     this.pts.frustumCulled = false;
     this.scene.add(this.pts); this.pN = N; this.pI = 0;
+    // 砂ぼこり（ダートは大きく、乾いた芝は少し）
+    const wet = ['小雨', '雨', '雪'].includes(this.wx) || ['重', '不良'].includes(this.race.going);
+    this.puffRate = isTurf ? (wet ? 0 : 0.25) : (wet ? 0.35 : 1);
+    const ptx = puffTex();
+    this.puffs = [];
+    const pc = isTurf ? 0xb8b090 : this.night ? 0x9a8a78 : 0xc8a47c;
+    for (let i = 0; i < (this.opts.lowPower ? 40 : 90); i++) {
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: ptx, color: pc, transparent: true, opacity: 0, depthWrite: false, fog: true }));
+      sp.visible = false; this.scene.add(sp); this.puffs.push({ sp, life: 0, max: 1, vx: 0, vz: 0 });
+    }
+    this.puffI = 0;
+    // 近くの草（立体）：選手の前後だけに置いて、通り過ぎたら前へ回す
+    const tt = tuftTex();
+    const tg = new THREE.PlaneGeometry(0.5, 0.32); tg.translate(0, 0.16, 0);
+    const tg2 = tg.clone(); tg2.rotateY(Math.PI / 2);
+    const geoT = mergeTwo(tg, tg2);
+    { const nr = geoT.attributes.normal.array; for (let i = 0; i < nr.length; i += 3) { nr[i] = 0; nr[i + 1] = 1; nr[i + 2] = 0; } } // 上向きの光で明るく
+    const n = this.opts.lowPower ? 900 : 2600;
+    const tm = new THREE.MeshStandardMaterial({ map: tt, alphaTest: 0.4, side: THREE.DoubleSide, roughness: 1, color: this.wx === '雪' ? 0xdfe6e0 : 0xd8f0c0 });
+    this.tufts = new THREE.InstancedMesh(geoT, tm, n); this.tufts.frustumCulled = false;
+    this.tuftD = [];
+    const zones = [[W + 1.3, W + 2.4, 1.1], [-3.8, -1.7, 0.85], [W + 3, W + 10, 1.5]];
+    for (let i = 0; i < n; i++) {
+      const z = zones[i % zones.length];
+      this.tuftD.push({ u: Math.random() * 90 - 20, d: z[0] + Math.random() * (z[1] - z[0]), s: z[2] * (0.6 + Math.random() * 0.7), ry: Math.random() * 3.14, dirty: true });
+    }
+    this.scene.add(this.tufts); this.tuftBase = null;
+  }
+  updateTufts(pu) {
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), pos = new THREE.Vector3(), e = new THREE.Euler();
+    if (this.tuftBase == null) { for (const t of this.tuftD) t.u += pu; this.tuftBase = pu; }
+    let ch = false;
+    this.tuftD.forEach((t, i) => {
+      while (t.u < pu - 20) { t.u += 90; t.dirty = true; }
+      while (t.u > pu + 70) { t.u -= 90; t.dirty = true; }
+      if (!t.dirty) return;
+      t.dirty = false; ch = true;
+      trackPos(t.u, t.d, tmp);
+      pos.set(tmp.x, (tmp.y || 0) + 0.01, tmp.z); e.set(0, t.ry, 0); q.setFromEuler(e); sc.set(t.s, t.s * (0.8 + (i % 5) * 0.1), t.s);
+      m.compose(pos, q, sc); this.tufts.setMatrixAt(i, m);
+    });
+    if (ch) this.tufts.instanceMatrix.needsUpdate = true;
+  }
+  puff(x, y, z, vx, vz, big) {
+    const P = this.puffs[this.puffI]; this.puffI = (this.puffI + 1) % this.puffs.length;
+    P.sp.position.set(x, y + 0.4, z); P.vx = vx; P.vz = vz; P.max = P.life = 1.2 + Math.random() * 0.9; P.big = big;
+    P.sp.visible = true; P.sp.material.rotation = Math.random() * 6;
   }
   emit(x, y, z, vx, vz) {
     const i = this.pI; this.pI = (this.pI + 1) % this.pN;
+    const turfBit = this.isTurf && Math.random() < 0.55;
+    const c = turfBit ? [0.2 + Math.random() * 0.1, 0.36 + Math.random() * 0.15, 0.12] : [0.36 + Math.random() * 0.12, 0.25 + Math.random() * 0.08, 0.15];
+    this.pCol[i * 3] = c[0]; this.pCol[i * 3 + 1] = c[1]; this.pCol[i * 3 + 2] = c[2];
     this.pPos[i * 3] = x; this.pPos[i * 3 + 1] = y; this.pPos[i * 3 + 2] = z;
     this.pVel[i * 3] = vx + (Math.random() - 0.5) * 1.5; this.pVel[i * 3 + 1] = 1.5 + Math.random() * 2.5; this.pVel[i * 3 + 2] = vz + (Math.random() - 0.5) * 1.5;
     this.pLife[i] = 0.7 + Math.random() * 0.4;
@@ -441,10 +504,26 @@ export class RaceView {
         const step = Math.floor(ph / Math.PI);
         if (step !== H.lastStep) {
           H.lastStep = step;
-          const cnt = this.race.surf === 'ダ' ? 6 : 3;
-          for (let k = 0; k < cnt; k++) this.emit(p.x - p.hx * (0.5 + Math.random()), (p.y || 0) + 0.08, p.z - p.hz * (0.5 + Math.random()), -p.hx * r.v * 0.15, -p.hz * r.v * 0.15);
+          const cnt = this.race.surf === 'ダ' ? 8 : 5;
+          for (let k = 0; k < cnt; k++) this.emit(p.x - p.hx * (0.5 + Math.random()), (p.y || 0) + 0.08, p.z - p.hz * (0.5 + Math.random()), -p.hx * r.v * 0.18, -p.hz * r.v * 0.18);
+          if (Math.random() < this.puffRate * 0.5) this.puff(p.x - p.hx * 1.4, p.y || 0, p.z - p.hz * 1.4, -p.hx * r.v * 0.08, -p.hz * r.v * 0.08);
         }
       }
+      // 汗：疲れるほど毛づやが濡れて暗く光る
+      if (H.coatMat) {
+        const tired = 1 - Math.max(0, Math.min(1, r.energy / r.cap / 0.6));
+        const sw = Math.min(1, (this.race.t || 0) / 40) * 0.35 + tired * 0.65;
+        H.coatMat.roughness = 0.42 - sw * 0.24;
+        H.coatMat.color.copy(H.coatBase).multiplyScalar(1 - sw * 0.18);
+      }
+    }
+    // 砂ぼこり
+    for (const P of this.puffs) {
+      if (P.life <= 0) { if (P.sp.visible) P.sp.visible = false; continue; }
+      P.life -= dt; const k = 1 - P.life / P.max;
+      P.sp.position.x += P.vx * dt; P.sp.position.z += P.vz * dt; P.sp.position.y += dt * 0.35;
+      const sz = (P.big ? 1.2 : 0.8) + k * (P.big ? 4 : 2.6); P.sp.scale.set(sz, sz * 0.75, 1);
+      P.sp.material.opacity = Math.sin(Math.min(1, k * 3) * Math.PI / 2) * (1 - k) * (this.isTurf ? 0.35 : 0.6);
     }
     // 粒子
     for (let i = 0; i < this.pN; i++) {
@@ -478,6 +557,7 @@ export class RaceView {
           stretch(this.whipStick, hand, tip, 0.65);
         }
       }
+      this.updateTufts(r.u);
       if (this.view === 'fp') {
         const bob = P.bodyG.position.y;
         this.shake = Math.max(0, this.shake - dt);
@@ -485,9 +565,9 @@ export class RaceView {
         this.rig.position.set(0.12, 2.55 - bob * 0.55 + Math.sin(this.t * 40) * sh * 0.1, 0);
         this.camera.rotation.set(-0.13 - P.bodyG.rotation.z * 0.6 + (Math.random() - 0.5) * sh * 0.05, -Math.PI / 2, -P.yaw * 0.5 + (Math.random() - 0.5) * sh * 0.05);
         this.camera.rotation.x -= 0;
-        const k = Math.min(1, r.v / 18);
-        const baseFov = this.camera.aspect < 1 ? 90 : 66;
-        this.camera.fov += ((baseFov + k * 6) - this.camera.fov) * 0.05;
+        const k = Math.max(0, Math.min(1, (r.v - 12) / 6));
+        const baseFov = this.camera.aspect < 1 ? 88 : 64;
+        this.camera.fov += ((baseFov + k * 7 + (r.whipT > 0 ? 3 : 0)) - this.camera.fov) * 0.06;
         this.camera.updateProjectionMatrix();
       } else {
         const p = trackPos(r.u, r.d, {});
@@ -528,11 +608,21 @@ export class RaceView {
   dispose() {
     this.renderer.domElement.style.transform = ''; setMirror(false);
     window.removeEventListener('resize', this._onResize);
-    this.scene.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) { const ms = Array.isArray(o.material) ? o.material : [o.material]; ms.forEach(m => { if (m.map) m.map.dispose(); m.dispose(); }); } });
+    this.scene.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) { const ms = Array.isArray(o.material) ? o.material : [o.material]; ms.forEach(m => { if (m.map) m.map.dispose(); if (m.bumpMap) m.bumpMap.dispose(); m.dispose(); }); } });
     this.renderer.dispose();
   }
 }
 
+function mergeTwo(a, b) {
+  const g = new THREE.BufferGeometry();
+  for (const k of ['position', 'normal', 'uv']) {
+    const A = a.attributes[k].array, B = b.attributes[k].array, out = new Float32Array(A.length + B.length);
+    out.set(A); out.set(B, A.length); g.setAttribute(k, new THREE.BufferAttribute(out, a.attributes[k].itemSize));
+  }
+  const ia = a.index.array, ib = b.index.array, na = a.attributes.position.count, idx = new Uint16Array(ia.length + ib.length);
+  idx.set(ia); for (let i = 0; i < ib.length; i++) idx[ia.length + i] = ib[i] + na;
+  g.setIndex(new THREE.BufferAttribute(idx, 1)); return g;
+}
 const UP = new THREE.Vector3(0, 1, 0);
 function stretch(mesh, a, b, fixedLen) {
   const d = new THREE.Vector3().subVectors(b, a);

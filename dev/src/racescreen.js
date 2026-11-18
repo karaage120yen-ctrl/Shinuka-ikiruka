@@ -12,7 +12,7 @@ const SPEED = /fast/.test(location.hash) ? 5 : 1; // テスト用の早送り
 export function startRace(cfg) {
   const root = document.getElementById('race-screen');
   root.innerHTML = `
-    <canvas id="race-canvas"></canvas>
+    <canvas id="race-canvas"></canvas><div id="vig"></div><div id="vig-speed"></div>
     <div class="hud-top">
       <div class="hud-race"><b>${cfg.race.g ? `<span class="grade g-${cfg.race.g}">${cfg.race.g}</span>` : ''}${cfg.race.name}</b><span>${cfg.race.place || ''} ${cfg.race.surf}${cfg.race.dist}m・${cfg.race.weather || ''}・${cfg.race.going || ''}</span></div>
       <div class="hud-stats"><div><small>順位</small><b id="h-rank">-</b></div><div><small>残り</small><b id="h-rem">-</b></div><div><small>タイム</small><b id="h-time">0:00.0</b></div></div>
@@ -143,6 +143,7 @@ export function startRace(cfg) {
     const ratio = pl.energy / pl.cap;
     const gEl = $('h-gauge'); gEl.style.width = (ratio * 100).toFixed(1) + '%';
     gEl.style.background = ratio > 0.5 ? '#3ddc84' : ratio > 0.2 ? '#ffc93d' : '#ff4d4d';
+    { const vs = $('vig-speed'); if (vs) vs.style.opacity = SPEC ? 0 : Math.max(0, Math.min(1, (pl.v - 15.5) / 2.5)) * 0.7 + (pl.whipT > 0 ? 0.3 : 0) + (ratio <= 0 ? 0.25 : 0); if (vs) vs.classList.toggle('empty', ratio <= 0); }
     $('h-speed').textContent = Math.round(pl.v * 3.6) + ' km/h' + (pl.whipT > 0 ? ' ⚡' : '');
     $('b-whip').classList.toggle('cool', pl.whipCool > 0);
     if (SPEC) { const top = [...race.racers].sort((a, b) => (a.rank || 99) - (b.rank || 99)).slice(0, 3); $('h-msg2').innerHTML = top.map((r, i) => `<span><small>${i + 1}</small>${r.num}</span>`).join(''); }

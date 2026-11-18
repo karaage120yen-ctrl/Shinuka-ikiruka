@@ -19,37 +19,129 @@ function noise(ctx, w, h, base, amp, n = 9000, size = 2) {
 }
 const clampc = (v) => Math.max(0, Math.min(255, Math.round(v)));
 
-// 競馬場の芝（市松模様の刈り目）
-export function turfTex() {
-  const c = canvas(512, 512), x = c.getContext('2d');
-  const a = [66, 128, 44], b = [82, 146, 52];
-  for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) {
-    const col = (i + j) % 2 ? a : b;
-    x.fillStyle = `rgb(${col})`; x.fillRect(i * 256, j * 256, 256, 256);
+// なめらかなノイズ（値ノイズ）
+function vnoise(w, h, cell, seed = 1) {
+  const gw = Math.ceil(w / cell) + 2, gh = Math.ceil(h / cell) + 2, g = new Float32Array(gw * gh);
+  let x = seed * 9973; const r = () => { x = (x * 16807) % 2147483647; return x / 2147483647; };
+  for (let i = 0; i < g.length; i++) g[i] = r();
+  const gx = Math.ceil(w / cell), gy = Math.ceil(h / cell); // タイル状につながるように
+  return (px, py) => {
+    const fx = px / cell, fy = py / cell, ix = Math.floor(fx), iy = Math.floor(fy), tx = fx - ix, ty = fy - iy;
+    const sx = tx * tx * (3 - 2 * tx), sy = ty * ty * (3 - 2 * ty);
+    const at = (a, b) => g[((b % gy + gy) % gy) * gw + ((a % gx + gx) % gx)];
+    const a = at(ix, iy), b = at(ix + 1, iy), c = at(ix, iy + 1), d = at(ix + 1, iy + 1);
+    return a + (b - a) * sx + (c - a) * sy + (a - b - c + d) * sx * sy;
+  };
+}
+function fbmFill(ctx, w, h, fn) {
+  const img = ctx.getImageData(0, 0, w, h), d = img.data;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = (y * w + x) * 4; const c = fn(x, y, d[i], d[i + 1], d[i + 2]); d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; }
+  ctx.putImageData(img, 0, 0);
+}
+// 芝の葉（短い線をたくさん）
+function blades(x, w, h, n, base, amp, len = 5) {
+  for (let i = 0; i < n; i++) {
+    const v = (Math.random() - 0.5) * amp, px = Math.random() * w, py = Math.random() * h, l = len * (0.5 + Math.random());
+    x.strokeStyle = `rgb(${clampc(base[0] + v * 0.8)},${clampc(base[1] + v)},${clampc(base[2] + v * 0.5)})`;
+    x.lineWidth = 0.8 + Math.random() * 0.8;
+    x.beginPath(); x.moveTo(px, py); x.lineTo(px + (Math.random() - 0.5) * 2, py - l); x.stroke();
   }
-  noise(x, 512, 512, [74, 137, 48], 42, 26000, 1.6);
-  // 刈り目の線
-  x.globalAlpha = 0.08; x.fillStyle = '#d8ffb0';
-  for (let i = 0; i < 512; i += 8) x.fillRect(0, i, 512, 1);
-  x.globalAlpha = 1;
-  return tex(c);
 }
-// ダート（砂）
+// 競馬場の芝（刈り目の縞・葉・ムラ）
+const TURF = {};
+export function turfTex() {
+  if (!TURF.c) {
+    const S = 1024, c = canvas(S, S), x = c.getContext('2d');
+    const n1 = vnoise(S, S, 128, 3), n2 = vnoise(S, S, 32, 7);
+    x.fillStyle = 'rgb(70,132,46)'; x.fillRect(0, 0, S, S);
+    // 刈り目：進む方向に明暗の帯（1枚に2本）＋市松
+    fbmFill(x, S, S, (px, py) => {
+      const band = (Math.floor(px / (S / 2)) + Math.floor(py / (S / 2))) % 2 ? 1 : -1;
+      const k = band * 9 + (n1(px, py) - 0.5) * 26 + (n2(px, py) - 0.5) * 12;
+      return [70 + k * 0.7, 132 + k, 46 + k * 0.45];
+    });
+    blades(x, S, S, 38000, [74, 140, 50], 60, 6);
+    // クローバーや土の見えるところ
+    for (let i = 0; i < 120; i++) { x.fillStyle = `rgba(${Math.random() < 0.5 ? '96,84,52' : '40,90,30'},${0.12 + Math.random() * 0.12})`; x.beginPath(); x.ellipse(Math.random() * S, Math.random() * S, 3 + Math.random() * 10, 2 + Math.random() * 6, Math.random() * 3, 0, Math.PI * 2); x.fill(); }
+    TURF.c = c;
+    // でこぼこ用（明るさから作る）
+    const b = canvas(512, 512), bx = b.getContext('2d'); bx.drawImage(c, 0, 0, 512, 512);
+    fbmFill(bx, 512, 512, (px, py, r, g) => { const v = clampc((g - 90) * 3); return [v, v, v]; });
+    TURF.b = b;
+  }
+  const t = tex(TURF.c); t.bump = new THREE.CanvasTexture(TURF.b); t.bump.wrapS = t.bump.wrapT = THREE.RepeatWrapping;
+  return t;
+}
+// ダート（砂・蹄の跡）
+const DIRT = {};
 export function dirtTex() {
-  const c = canvas(512, 512), x = c.getContext('2d');
-  x.fillStyle = 'rgb(150,112,74)'; x.fillRect(0, 0, 512, 512);
-  noise(x, 512, 512, [150, 112, 74], 50, 30000, 1.4);
-  x.globalAlpha = 0.12; x.strokeStyle = '#5a3c22';
-  for (let i = 0; i < 40; i++) { x.beginPath(); const y = Math.random() * 512; x.moveTo(0, y); x.bezierCurveTo(170, y + 10, 340, y - 10, 512, y); x.stroke(); }
-  x.globalAlpha = 1;
+  if (!DIRT.c) {
+    const S = 1024, c = canvas(S, S), x = c.getContext('2d');
+    const n1 = vnoise(S, S, 96, 11), n2 = vnoise(S, S, 20, 5);
+    x.fillStyle = 'rgb(150,112,74)'; x.fillRect(0, 0, S, S);
+    fbmFill(x, S, S, (px, py) => { const k = (n1(px, py) - 0.5) * 34 + (n2(px, py) - 0.5) * 16; return [150 + k, 112 + k * 0.85, 74 + k * 0.6]; });
+    noise(x, S, S, [150, 112, 74], 60, 60000, 1.3);
+    // 蹄の跡
+    for (let i = 0; i < 900; i++) {
+      const px = Math.random() * S, py = Math.random() * S, r = 4 + Math.random() * 4;
+      x.fillStyle = 'rgba(70,46,26,0.28)'; x.beginPath(); x.ellipse(px, py, r * 1.3, r, 0, 0, Math.PI * 2); x.fill();
+      x.fillStyle = 'rgba(200,165,120,0.22)'; x.beginPath(); x.ellipse(px + r * 0.9, py, r * 0.6, r * 0.9, 0, 0, Math.PI * 2); x.fill();
+    }
+    // ハローの筋
+    x.globalAlpha = 0.1; x.strokeStyle = '#5a3c22';
+    for (let i = 0; i < 70; i++) { x.beginPath(); const y = Math.random() * S; x.moveTo(0, y); x.bezierCurveTo(S / 3, y + 10, S * 2 / 3, y - 10, S, y); x.stroke(); }
+    x.globalAlpha = 1;
+    DIRT.c = c;
+    const b = canvas(512, 512), bx = b.getContext('2d'); bx.drawImage(c, 0, 0, 512, 512);
+    fbmFill(bx, 512, 512, (px, py, r) => { const v = clampc((r - 110) * 2.5); return [v, v, v]; });
+    DIRT.b = b;
+  }
+  const t = tex(DIRT.c); t.bump = new THREE.CanvasTexture(DIRT.b); t.bump.wrapS = t.bump.wrapT = THREE.RepeatWrapping;
+  return t;
+}
+// 一般の草地（大きなムラ）
+export function grassTex() {
+  const S = 512, c = canvas(S, S), x = c.getContext('2d');
+  const n1 = vnoise(S, S, 128, 21), n2 = vnoise(S, S, 24, 4);
+  x.fillStyle = 'rgb(76,124,46)'; x.fillRect(0, 0, S, S);
+  fbmFill(x, S, S, (px, py) => { const k = (n1(px, py) - 0.5) * 46 + (n2(px, py) - 0.5) * 18; return [76 + k * 0.9, 124 + k, 46 + k * 0.4]; });
+  blades(x, S, S, 14000, [76, 124, 46], 60, 4);
   return tex(c);
 }
-// 一般の草地
-export function grassTex() {
-  const c = canvas(256, 256), x = c.getContext('2d');
-  x.fillStyle = 'rgb(76,124,46)'; x.fillRect(0, 0, 256, 256);
-  noise(x, 256, 256, [76, 124, 46], 50, 9000, 1.5);
-  return tex(c);
+// 草のかたまり（近くに生える立体の草）
+export function tuftTex() {
+  const c = canvas(128, 128), x = c.getContext('2d');
+  for (let i = 0; i < 46; i++) {
+    const bx = 10 + Math.random() * 108, h = 50 + Math.random() * 74, lean = (Math.random() - 0.5) * 40, g = 100 + Math.random() * 70;
+    x.strokeStyle = `rgb(${Math.round(g * 0.5)},${Math.round(g)},${Math.round(g * 0.3)})`; x.lineWidth = 2 + Math.random() * 2.5; x.lineCap = 'round';
+    x.beginPath(); x.moveTo(bx, 128); x.quadraticCurveTo(bx + lean * 0.3, 128 - h * 0.6, bx + lean, 128 - h); x.stroke();
+  }
+  // すき間の色を草色にしておく（遠くで黒くならないように）
+  const img = x.getImageData(0, 0, 128, 128), d = img.data;
+  for (let i = 0; i < d.length; i += 4) if (d[i + 3] < 10) { d[i] = 60; d[i + 1] = 110; d[i + 2] = 40; d[i + 3] = 0; }
+  x.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.premultiplyAlpha = false; t.generateMipmaps = false; t.minFilter = THREE.LinearFilter; return t;
+}
+// たてがみの毛すじ（白黒。色はマテリアルで付ける）
+export function maneTex() {
+  const c = canvas(256, 64), x = c.getContext('2d');
+  for (let i = 0; i < 520; i++) {
+    const px = Math.random() * 256, l = 30 + Math.random() * 34, v = 150 + Math.random() * 105;
+    x.strokeStyle = `rgb(${v},${v},${v})`; x.lineWidth = 0.8 + Math.random() * 1.4;
+    x.beginPath(); x.moveTo(px, 64); x.quadraticCurveTo(px + (Math.random() - 0.5) * 6, 64 - l * 0.5, px + (Math.random() - 0.5) * 10, 64 - l); x.stroke();
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.generateMipmaps = false; t.minFilter = THREE.LinearFilter; return t;
+}
+// 砂ぼこり
+export function puffTex() {
+  const c = canvas(128, 128), x = c.getContext('2d');
+  for (let i = 0; i < 9; i++) {
+    const px = 40 + Math.random() * 48, py = 40 + Math.random() * 48, r = 22 + Math.random() * 22;
+    const g = x.createRadialGradient(px, py, 2, px, py, r);
+    g.addColorStop(0, 'rgba(255,255,255,0.35)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+    x.fillStyle = g; x.fillRect(0, 0, 128, 128);
+  }
+  return new THREE.CanvasTexture(c);
 }
 // スタンドの観客
 export function crowdTex() {

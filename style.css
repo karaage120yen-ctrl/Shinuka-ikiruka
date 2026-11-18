@@ -399,3 +399,10 @@ table.ped td { border: 1px solid var(--line); padding: 6px; } table.ped td b { f
 .title-bg::after { background: linear-gradient(180deg, rgba(8,4,2,.35) 0%, rgba(8,4,2,.05) 28%, rgba(8,10,8,.25) 45%, rgba(6,12,9,.85) 68%, #0b1a14 100%); }
 .title-bg { height: 640px; background-position: center top; }
 .title-bg::after { background: linear-gradient(180deg, rgba(8,4,2,.55) 0%, rgba(8,4,2,.25) 35%, rgba(6,12,9,.55) 70%, #0b1a14 100%); }
+
+/* レース画面の質感：周辺減光とスピード感 */
+#vig { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at 50% 45%, transparent 55%, rgba(0,0,0,.38) 100%); mix-blend-mode: multiply; }
+#vig-speed { position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .25s;
+  background: repeating-conic-gradient(from 0deg at 50% 46%, rgba(255,255,255,.0) 0deg 3deg, rgba(255,255,255,.07) 3.4deg 3.8deg, rgba(255,255,255,0) 4.2deg 7deg);
+  -webkit-mask: radial-gradient(ellipse at 50% 46%, transparent 38%, #000 80%); mask: radial-gradient(ellipse at 50% 46%, transparent 38%, #000 80%); }
+#vig-speed.empty { background: radial-gradient(ellipse at 50% 46%, transparent 45%, rgba(120,0,0,.45) 100%); -webkit-mask: none; mask: none; }
