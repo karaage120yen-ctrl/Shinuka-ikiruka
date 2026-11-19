@@ -259,6 +259,7 @@ function settingsScreen() {
     <label class="sw-row"><span>🔔 効果音</span><input type="range" id="v-sfx" min="0" max="100" value="${Math.round(((S.settings.vol || {}).sfx ?? 0.8) * 100)}"></label>
     <label class="sw-row"><span>📣 歓声</span><input type="range" id="v-crowd" min="0" max="100" value="${Math.round(((S.settings.vol || {}).crowd ?? 0.7) * 100)}"></label>
     <label class="sw-row"><span>レース前のパドック・ファンファーレ</span><input type="checkbox" id="prerace" ${S.settings.prerace !== false ? 'checked' : ''}></label>
+    <label class="sw-row"><span>スタートはゲートの正面から見る</span><input type="checkbox" id="startcut" ${S.settings.startCut !== false ? 'checked' : ''}></label>
     <label class="sw-row"><span>カットシーン</span><input type="checkbox" id="cuts" ${S.settings.cuts !== false ? 'checked' : ''}></label>
     <label class="sw-row"><span>レースの視点（最初）</span><select id="vw"><option value="fp" ${S.settings.view === 'fp' ? 'selected' : ''}>騎手視点</option><option value="back" ${S.settings.view === 'back' ? 'selected' : ''}>後ろから</option><option value="tv" ${S.settings.view === 'tv' ? 'selected' : ''}>中継</option></select></label></div>
     <div class="card"><b>遊び方</b><p class="small">馬は0歳から育てて、2歳6月からレースに出られます。7歳の年末か、重い故障で引退。疲れたまま調教するとケガをしやすく、重い故障だと競走生命の危機に。<br>レースは騎手視点。◀▶で進路を変え、ムチで加速。体力ゲージの使い方が勝負の分かれ目です。</p></div>
@@ -269,6 +270,7 @@ function settingsScreen() {
   document.getElementById('snd').onchange = (e) => { S.settings.sound = e.target.checked; setSound(S.settings.sound); save(); };
   for (const k of ['bgm', 'sfx', 'crowd']) document.getElementById('v-' + k).oninput = (e) => { S.settings.vol = { bgm: 0.5, sfx: 0.8, crowd: 0.7, ...(S.settings.vol || {}), [k]: +e.target.value / 100 }; initAudio(); setVolumes(S.settings.vol); save(); };
   document.getElementById('prerace').onchange = (e) => { S.settings.prerace = e.target.checked; save(); };
+  document.getElementById('startcut').onchange = (e) => { S.settings.startCut = e.target.checked; save(); };
   document.getElementById('snd').addEventListener('change', () => { if (S.settings.sound) { initAudio(); playBgm('menu', true); } });
   document.getElementById('cuts').onchange = (e) => { S.settings.cuts = e.target.checked; save(); };
   document.getElementById('vw').onchange = (e) => { S.settings.view = e.target.value; save(); };

@@ -4,7 +4,8 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { TRACK, trackPos, elev } from './sim.js';
 import { COAT } from './data.js';
 import { buildHorse, animateHorse } from './model.js';
-import { turfTex, dirtTex, grassTex, tuftTex, puffTex, crowdTex, standingCrowdTex, buildingTex, textTex, blobTex, setMirror } from './textures.js';
+import { turfTex, dirtTex, grassTex, tuftTex, puffTex, crowdTex, standingCrowdTex, buildingTex, textTex, blobTex, setMirror, bannerTex, padTex, cloudTex } from './textures.js';
+import { frameMap, FRAME_COLORS } from './bet.js';
 
 const W = TRACK.width;
 const tmp = {};
@@ -141,6 +142,17 @@ export class RaceView {
       this.envRT = pm.fromScene(envS, 0.02, 0.1, 500); pm.dispose();
       S.environment = this.envRT.texture; S.environmentIntensity = night ? 0.35 : 0.55;
     } catch (e) { console.warn(e); }
+    // もくもくの雲（晴れ・曇りの昼）：地平線のまわりに大きな雲を置く
+    if (!night && cloudy < 0.8) {
+      const cn = this.opts.lowPower ? 10 : 18;
+      for (let i = 0; i < cn; i++) {
+        const a = (i / cn) * Math.PI * 2 + Math.sin(i * 12.9898) * 0.25, dist = 1500 + (i % 3) * 300;
+        const sz = 520 + ((i * 37) % 7) * 70;
+        const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: cloudTex(i + 1), transparent: true, depthWrite: false, fog: false, color: cloudy > 0.3 ? 0xd8dde4 : 0xffffff }));
+        sp.scale.set(sz, sz * 0.5, 1); sp.position.set(Math.cos(a) * dist, 110 + ((i * 53) % 5) * 55 + sz * 0.2, Math.sin(a) * dist);
+        sp.renderOrder = -0.5; S.add(sp);
+      }
+    }
     const hemiI = night ? 0.16 : 0.85 - cloudy * 0.15;
     S.add(new THREE.HemisphereLight(night ? 0x8090c0 : 0xd6e8ff, 0x52602f, hemiI));
     const sun = new THREE.DirectionalLight(night ? 0xdfe6ff : 0xfff0d8, night ? 0.9 : 2.6 * (1 - cloudy * 0.6));
@@ -151,6 +163,8 @@ export class RaceView {
     const sc = sun.shadow.camera; sc.left = -30; sc.right = 30; sc.top = 30; sc.bottom = -30; sc.near = 1; sc.far = 220;
     sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.03;
     S.add(sun); S.add(sun.target); this.sun = sun;
+    // カメラ側からのやわらかい補助光（正面から見た顔が暗くならないように）
+    this.fill = new THREE.DirectionalLight(0xfff4e6, night ? 0.25 : 0.55 * (1 - cloudy * 0.4)); S.add(this.fill); S.add(this.fill.target);
 
     // 地面
     const gt = grassTex(); gt.repeat.set(600, 600);
@@ -381,49 +395,75 @@ export class RaceView {
     const race = this.race;
     const n = race.racers.length;
     const g = new THREE.Group();
-    const green = new THREE.MeshStandardMaterial({ color: 0x2f9a44, roughness: 0.45, metalness: 0.2 });
+    const green = new THREE.MeshStandardMaterial({ color: 0x23944a, roughness: 0.38, metalness: 0.25 });
+    const dkgreen = new THREE.MeshStandardMaterial({ color: 0x166b33, roughness: 0.45, metalness: 0.2 });
     const grey = new THREE.MeshStandardMaterial({ color: 0xcfcfcf, roughness: 0.5 });
-    const white = new THREE.MeshStandardMaterial({ color: 0xf4f6f2, roughness: 0.5 });
-    trackPos(race.u0 + 1.6, 0, tmp);
+    const pad = new THREE.MeshStandardMaterial({ map: padTex(), roughness: 0.65 });
+    const GU = race.u0 + 1.6, PITCH = 1.25, H = 2.65, D = 1.3;
+    trackPos(GU, 0, tmp);
     const ang = Math.atan2(-tmp.hz, tmp.hx), gy = tmp.y;
+    // ゲートの座標（a=走る向き, d=横, y=高さ）→ 世界
+    const at = (a, d, y) => { const p = trackPos(GU + a, d, {}); return new THREE.Vector3(p.x, gy + y, p.z); };
+    // 部品は色ごとにまとめて1つのメッシュにする（描画を軽く）
+    const parts = new Map();
+    const put = (geo, m, pos, quat) => { geo.applyMatrix4(new THREE.Matrix4().compose(pos, quat, new THREE.Vector3(1, 1, 1))); if (!parts.has(m)) parts.set(m, []); parts.get(m).push(geo.index ? geo.toNonIndexed() : geo); };
+    const tube = (A, B, r, m = green) => { const dv = new THREE.Vector3().subVectors(B, A), len = dv.length(); put(new THREE.CylinderGeometry(r, r, len, 8), m, A.clone().addScaledVector(dv, 0.5), new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dv.normalize())); };
+    const yq = (ry) => new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), ry);
+    const d0 = 0.5, d1 = 0.5 + n * PITCH;
     for (let i = 0; i <= n; i++) {
-      const d = 0.5 + i * 1.25;
-      const p = trackPos(race.u0 + 1.6, d, {});
-      // 仕切り：緑の鉄骨の枠＋白い板（トラス）
-      const fr = new THREE.Group(); fr.position.set(p.x, gy, p.z); fr.rotation.y = ang;
-      const bar = (w, h, x, y, rz = 0) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.09), green); m.position.set(x, y, 0); m.rotation.z = rz; fr.add(m); };
-      bar(0.1, 2.5, -1.25, 1.25); bar(0.1, 2.5, 1.25, 1.25); bar(2.6, 0.1, 0, 2.45); bar(2.6, 0.1, 0, 1.3); bar(2.6, 0.1, 0, 0.4);
-      bar(0.07, 1.55, -0.6, 1.85, 0.75); bar(0.07, 1.55, 0.6, 1.85, -0.75);
-      const pn = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.85, 0.04), white); pn.position.set(0, 0.85, 0); fr.add(pn);
-      g.add(fr);
+      const d = d0 + i * PITCH;
+      // 仕切り：前後の柱・上中下の横棒・上半分にX字の筋交い・下半分に白いクッション
+      for (const a of [-D, D]) tube(at(a, d, 0), at(a, d, H), 0.065);
+      for (const y of [0.42, 1.6, H]) tube(at(-D, d, y), at(D, d, y), 0.05);
+      tube(at(-D, d, 1.6), at(0, d, H), 0.035); tube(at(0, d, 1.6), at(-D, d, H), 0.035);
+      tube(at(0, d, 1.6), at(D, d, H), 0.035); tube(at(D, d, 1.6), at(0, d, H), 0.035);
+      put(new THREE.BoxGeometry(2 * D - 0.12, 1.1, 0.12), pad, at(0, d, 1.0), yq(ang));
     }
-    const a = trackPos(race.u0 + 1.6, 0.5, {}), b = trackPos(race.u0 + 1.6, 0.5 + n * 1.25, {});
-    const beam = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.6, n * 1.25 + 0.4), green);
-    beam.position.set((a.x + b.x) / 2, gy + 2.7, (a.z + b.z) / 2); beam.rotation.y = ang; g.add(beam);
+    // 前の扉（2枚ずつ、外に開いた状態）
+    const doorG = new THREE.BoxGeometry(0.58, 1.05, 0.06); doorG.translate(0.29, 0, 0);
+    const edgeG = mergeGeometries([0.52, -0.52].map(y => new THREE.BoxGeometry(0.62, 0.07, 0.08).translate(0.29, y, 0).toNonIndexed()));
+    for (let i = 0; i < n; i++) for (const s of [0, 1]) {
+      const dh = d0 + (i + s) * PITCH, hinge = at(D + 0.04, dh, 1.08);
+      const fw = at(D + 1, dh, 0).sub(at(D, dh, 0)).normalize(), lat = at(D, dh + 1, 0).sub(at(D, dh, 0)).normalize().multiplyScalar(s === 0 ? 1 : -1);
+      const dir = lat.multiplyScalar(Math.cos(1.2)).addScaledVector(fw, Math.sin(1.2));
+      const q = yq(Math.atan2(-dir.z, dir.x));
+      put(doorG.clone(), pad, hinge, q); put(edgeG.clone(), green, hinge, q);
+    }
+    // 上のトラス（前と後ろ）：上下の弦材＋ジグザグ
+    for (const a of [D, -D]) {
+      tube(at(a, d0 - 0.15, H), at(a, d1 + 0.15, H), 0.07); tube(at(a, d0 - 0.15, H + 0.62), at(a, d1 + 0.15, H + 0.62), 0.07);
+      const k = n * 2;
+      for (let j = 0; j < k; j++) { const da = d0 + j * PITCH / 2, db = da + PITCH / 2; tube(at(a, da, j % 2 ? H + 0.62 : H), at(a, db, j % 2 ? H : H + 0.62), 0.032); }
+    }
+    for (let i = 0; i <= n; i += 2) tube(at(-D, d0 + i * PITCH, H + 0.62), at(D, d0 + i * PITCH, H + 0.62), 0.04);
     // 前に向けて板を置く（ゲートの正面側）
     const front = (mesh, d, y, off = 0.27, both = true) => {
       // 前と後ろの両方に置く（正面からも騎手視点からも読めるように）
       for (const sd of both ? [1, -1] : [1]) {
         const m2 = sd === 1 ? mesh : mesh.clone();
-        const q = trackPos(race.u0 + 1.6, d, {});
+        const q = trackPos(GU + sd * D, d, {});
         m2.position.set(q.x + sd * Math.cos(ang) * off, gy + y, q.z - sd * Math.sin(ang) * off);
         m2.rotation.y = ang + (sd === 1 ? Math.PI / 2 : -Math.PI / 2);
         if (m2.material && m2.material.side === THREE.DoubleSide) m2.material = m2.material.clone(), m2.material.side = THREE.FrontSide;
         g.add(m2);
       }
     };
-    // 黄色い馬番の板
+    // 番号の帯（濃い緑）と黄色い馬番の板
+    const band = new THREE.Mesh(new THREE.PlaneGeometry(n * PITCH + 0.2, 0.66), new THREE.MeshStandardMaterial({ color: 0x15602e, roughness: 0.6, side: THREE.DoubleSide }));
+    front(band, (d0 + d1) / 2, H + 0.31, 0.1);
     for (let i = 0; i < n; i++) {
-      const num = race.racers.slice().sort((x, y) => x.gate - y.gate)[i]?.num ?? i + 1;
-      const pt = textTex(String(i + 1), { w: 128, h: 128, bg: '#f5c800', fg: '#111111', size: 92 });
-      front(new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.5), new THREE.MeshBasicMaterial({ map: pt, side: THREE.DoubleSide })), 0.5 + (i + 0.5) * 1.25, 2.7);
+      const pt = textTex(String(i + 1), { w: 128, h: 128, bg: '#f7cf00', fg: '#141414', size: 96, border: '#e0a800' });
+      front(new THREE.Mesh(new THREE.PlaneGeometry(0.56, 0.52), new THREE.MeshBasicMaterial({ map: pt, side: THREE.DoubleSide })), d0 + (i + 0.5) * PITCH, H + 0.31, 0.13);
     }
-    // 赤い横断幕（レース名）
+    // 赤い横断幕（レース名）：緑の枠つきで上に立てる
     const title = this.opts.title || '死ぬか生きるかの戦い';
-    const bt = textTex(title, { w: 1024, h: 128, bg: '#c4161c', fg: '#ffe9a8', size: 80 });
-    const bw = Math.min(n * 1.25 * 0.8, 9);
-    front(new THREE.Mesh(new THREE.PlaneGeometry(bw, 0.75), new THREE.MeshBasicMaterial({ map: bt, side: THREE.DoubleSide })), 0.5 + n * 1.25 / 2, 3.45, 0.2, false);
-    for (const e of [-1, 1]) { const q = trackPos(race.u0 + 1.6, 0.5 + n * 1.25 / 2 + e * bw / 2, {}); const pole = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.9, 0.08), grey); pole.position.set(q.x, gy + 3.25, q.z); g.add(pole); }
+    const bw = Math.min(n * PITCH * 0.86, 10.5), bc = (d0 + d1) / 2;
+    const bh = bw * 0.125, byc = H + 0.62 + 0.18 + bh / 2;
+    front(new THREE.Mesh(new THREE.PlaneGeometry(bw, bh), new THREE.MeshBasicMaterial({ map: bannerTex(title), side: THREE.DoubleSide })), bc, byc, 0.06, false);
+    const by0 = H + 0.62, by1 = byc + bh / 2 + 0.06, byb = byc - bh / 2 - 0.06;
+    for (const e of [-1, 1]) { tube(at(D, bc + e * (bw / 2 + 0.06), by0), at(D, bc + e * (bw / 2 + 0.06), by1), 0.06); }
+    tube(at(D, bc - bw / 2 - 0.06, by1), at(D, bc + bw / 2 + 0.06, by1), 0.05); tube(at(D, bc - bw / 2 - 0.06, byb), at(D, bc + bw / 2 + 0.06, byb), 0.05);
+    for (const [m, list] of parts) { const mesh = new THREE.Mesh(mergeGeometries(list), m); mesh.castShadow = true; mesh.receiveShadow = true; g.add(mesh); }
     this.scene.add(g); this.gate = g;
   }
 
@@ -432,7 +472,9 @@ export class RaceView {
     const blob = new THREE.MeshBasicMaterial({ map: blobTex(), transparent: true, depthWrite: false });
     for (const r of this.race.racers) {
       const coat = COAT[r.coat ?? 0];
-      const H = buildHorse(coat, r.silk ?? 0xffffff, r.num, { shadow: true, cap: r.cap });
+      // 帽子の色は枠の色（1枠白・2枠黒・3枠赤・4枠青・5枠黄・6枠緑・7枠橙・8枠桃）
+      const fm = frameMap(this.race.racers.length);
+      const H = buildHorse(coat, r.silk ?? 0xffffff, r.num, { shadow: true, cap: FRAME_COLORS[(fm[(r.num || 1) - 1] || 1) - 1] }); // r.cap はスタミナの量なので使わない
       const sh = new THREE.Mesh(new THREE.PlaneGeometry(3.0, 1.2), blob);
       sh.rotation.x = -Math.PI / 2; sh.position.y = 0.03; H.root.add(sh);
       this.scene.add(H.root);
@@ -560,7 +602,10 @@ export class RaceView {
       H.root.rotation.y = ang + H.yaw;
       if (r.fallen && H.jock.visible) { H.jock.visible = false; }
       if (H.coatMat) { const gl = r.godT > 0 ? Math.min(1, r.godT) : 0; if (gl || H._gl) { H.coatMat.emissive.setRGB(0.9 * gl, 0.65 * gl, 0.1 * gl); H._gl = gl; } }
-      const ph = animateHorse(H, r.stride, r.v, this.t);
+      // ゲートを出た直後は前脚を高く上げて伸び上がる
+      const ts = (this.race.t || 0) - (r.gateDelay || 0);
+      const leap = this.race.started && ts > 0 && ts < 1.9 && r.u - this.race.u0 < 14 ? (ts < 0.45 ? ts / 0.45 : ts < 1.05 ? 1 : Math.max(0, 1 - (ts - 1.05) / 0.8)) : 0;
+      const ph = animateHorse(H, r.stride, r.v, this.t, leap * (0.75 + ((r.num || 0) * 0.37) % 1 * 0.25));
       // 蹄の跡（土や芝が飛ぶ）
       if (r.v > 8) {
         const step = Math.floor(ph / Math.PI);
@@ -638,17 +683,22 @@ export class RaceView {
         let target;
         if (this.view === 'orbit') {
           const a = this.t * 0.35;
-          camPos.set(p.x + Math.cos(a) * 6.5, (p.y || 0) + 3.2, p.z + Math.sin(a) * 6.5);
-          target = new THREE.Vector3(p.x, (p.y || 0) - 0.6, p.z);
+          // ゲートの番号板より下の高さから、自分の馬の顔と体を見る
+          camPos.set(p.x + Math.cos(a) * 6, (p.y || 0) + 2.45, p.z + Math.sin(a) * 6);
+          target = new THREE.Vector3(p.x, (p.y || 0) + 1.5, p.z);
           this.camera.position.copy(camPos); this.camera.lookAt(target);
-        } else if (this.view === 'hero') {
-          // タイトル用：ゲートの正面・低い位置から、飛び出す馬たちを見上げる
-          const n = this.race.racers.length, mid = 0.5 + n * 1.25 / 2;
-          const q = trackPos(this.race.u0 + (this.heroDist || 9), mid + (this.heroSide || 2.5), {}), f = trackPos(this.race.u0 + 1, mid + (this.heroSide || 2.5) * 0.4, {});
-          camPos.set(q.x, (q.y || 0) + (this.heroH || 1.1), q.z);
-          target = new THREE.Vector3(f.x, (f.y || 0) + 1.9, f.z);
+        } else if (this.view === 'hero' || this.view === 'start') {
+          // ゲートの正面・内ラチ寄りの低い位置から、ななめにゲートを見る（飛び出す馬が手前に迫る）
+          const port = this.camera.aspect < 1;
+          const hd = this.heroDist ?? (port ? 8.5 : 7.0), cd = this.heroSide ?? (port ? 0.6 : 0.3), td = this.heroTD ?? (port ? 3.0 : 3.9);
+          // スタートの演出では、先頭の馬が近づいたらカメラも後ろへ下がる
+          let cu = this.race.u0 + 1.6 + hd;
+          if (this.view === 'start') { let lead = -1e9; for (const q2 of this.race.racers) lead = Math.max(lead, q2.u); cu = Math.max(cu, lead + 5.2); }
+          const q = trackPos(cu, cd, {}), f = trackPos(cu - hd - 0.4, td, {});
+          camPos.set(q.x, (q.y || 0) + (this.heroH ?? 1.05), q.z);
+          target = new THREE.Vector3(f.x, (f.y || 0) + (this.heroTH ?? 2.0), f.z);
           this.camera.position.copy(camPos); this.camera.lookAt(target);
-          if (Math.abs(this.camera.fov - (this.heroFov || 58)) > 0.1) { this.camera.fov = this.heroFov || 58; this.camera.updateProjectionMatrix(); }
+          this.heroFovNow = this.heroFov ?? (port ? 64 : 50);
         } else if (this.view === 'front') {
           const q = trackPos(r.u + (this.frontDist || 9), r.d + (this.frontDist || 9) * 0.17, {});
           camPos.set(q.x, (q.y || 0) + 2.1, q.z);
@@ -667,8 +717,8 @@ export class RaceView {
           camPos.set(p.x - p.hx * back + p.nx * 1.5, (p.y || 0) + 4.2, p.z - p.hz * back + p.nz * 1.5);
           target = new THREE.Vector3(p.x + p.hx * 8, (p.y || 0) + 1.4, p.z + p.hz * 8);
         }
-        if (this.view !== 'orbit' && this.view !== 'goal' && this.view !== 'front' && this.view !== 'hero') { this.camera.position.lerp(camPos, 1 - Math.exp(-dt * 10)); this.camera.lookAt(target); }
-        const wf = this.view === 'hero' ? (this.heroFov || 58) : this.view === 'goal' ? 22 : (this.camera.aspect < 1 ? 90 : 66) - (this.view === 'fp' ? 0 : 6);
+        if (this.view !== 'orbit' && this.view !== 'goal' && this.view !== 'front' && this.view !== 'hero' && this.view !== 'start') { this.camera.position.lerp(camPos, 1 - Math.exp(-dt * 10)); this.camera.lookAt(target); }
+        const wf = this.view === 'hero' || this.view === 'start' ? this.heroFovNow : this.view === 'goal' ? 22 : (this.camera.aspect < 1 ? 90 : 66) - (this.view === 'fp' ? 0 : 6);
         if (Math.abs(this.camera.fov - wf) > 0.1) { this.camera.fov = wf; this.camera.updateProjectionMatrix(); }
       }
       const pp = trackPos(r.u, r.d, {}); const p0y = pp.y;
@@ -677,6 +727,7 @@ export class RaceView {
       this.sun.target.updateMatrixWorld();
       this.camera.getWorldPosition(camPos);
       this.sky.position.copy(camPos);
+      if (this.fill) { this.fill.position.copy(camPos).add(new THREE.Vector3(0, 6, 0)); this.fill.target.position.set(pp.x, (pp.y || 0) + 1, pp.z); this.fill.target.updateMatrixWorld(); }
       if (this.flood) this.flood.position.set(camPos.x, camPos.y + 30, camPos.z);
       if (this.windmill) this.windmill.rotation.z += dt * 0.4;
       // 観客：ゴールが近づくと立ち上がって盛り上がる

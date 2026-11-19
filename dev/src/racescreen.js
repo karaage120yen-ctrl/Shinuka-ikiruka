@@ -1,5 +1,6 @@
 // ===== レース画面（パドック・本馬場入場・操作・HUD・結果・リプレイ・写真判定） =====
 import { createRace, stepRace, makeOpponents, marginText, trackPos, TRACK, setSimSeed, fieldResult, setVenue, rollWeather } from './sim.js';
+import { frameMap, FRAME_COLORS } from './bet.js';
 import { RaceView } from './render3d.js';
 import { fmtTime, SILKS } from './data.js';
 import * as A from './audio.js';
@@ -83,9 +84,13 @@ export function startRace(cfg) {
   const kd = (e) => keys(e, true), ku = (e) => keys(e, false);
   window.addEventListener('keydown', kd); window.addEventListener('keyup', ku);
   const views = ['fp', 'back', 'tv'];
-  const viewNames = { fp: '騎手視点', back: '後ろから', tv: '中継', goal: 'ゴール前', orbit: 'パドック', front: '正面' };
+  const viewNames = { fp: '騎手視点', back: '後ろから', tv: '中継', goal: 'ゴール前', orbit: 'パドック', front: '正面', start: 'スタート' };
+  // スタートの演出：ゲートの正面から飛び出す馬を見せてから、いつもの視点にもどる
+  const startCut = S.settings.startCut !== false && !/nocut/.test(location.hash);
+  const prefView = () => SPEC ? 'tv' : (S.settings.view || 'fp');
+  const endStartCut = () => { if (view.view !== 'start') return; const v = prefView(); view.setView(v); $('h-view').textContent = viewNames[v]; };
   $('h-view').textContent = viewNames[view.view] || '視点';
-  $('h-view').onclick = () => { if (phase !== 'race') return; const v = views[(views.indexOf(view.view) + 1) % views.length]; view.setView(v); if (!SPEC) { S.settings.view = v; save(); } $('h-view').textContent = viewNames[v]; };
+  $('h-view').onclick = () => { if (phase !== 'race') return; if (view.view === 'start') { endStartCut(); return; } const v = views[(views.indexOf(view.view) + 1) % views.length]; view.setView(v); if (!SPEC) { S.settings.view = v; save(); } $('h-view').textContent = viewNames[v]; };
   let quit = false;
   $('h-quit').onclick = () => { if (phase === 'replay') return; if (confirm('レースを中止しますか？（出走しなかったことになります）')) { quit = true; finish(null); } };
 
@@ -139,18 +144,19 @@ export function startRace(cfg) {
     phase = 'paddock'; view.setView('orbit'); root.classList.add('pre');
     A.playBgm('paddock');
     const pl = race.player;
+    const FM = frameMap(race.racers.length);
     const rows = [...race.racers].sort((a, b) => a.num - b.num).map(r => {
       const h = hashS(r.name || ''), wt = r.wt || 440 + (h % 90), dw = r.dw ?? ((h >> 4) % 13) - 6;
       const c = Math.max(0, Math.min(4, (r.cond ?? 2) + (((h >> 8) % 3) - 1) * (r.isPlayer ? 0 : 1)));
       r._kehai = c;
-      return `<tr class="${r.isPlayer ? 'me' : ''} ${cfg.rival && r.name === cfg.rival ? 'rival' : ''}"><td><span class="num" style="background:#${(r.cap ?? r.silk ?? 0xffffff).toString(16).padStart(6, '0')}">${r.num}</span></td><td>${esc(r.name)}${cfg.rival && r.name === cfg.rival ? '<em>ライバル</em>' : ''}<small>${esc(r.jname || '')}</small></td><td>${wt}<small>(${dw > 0 ? '+' : ''}${dw})</small></td><td class="kh k${c}">${KEHAI[c]}</td></tr>`;
+      return `<tr class="${r.isPlayer ? 'me' : ''} ${cfg.rival && r.name === cfg.rival ? 'rival' : ''}"><td><span class="num" style="background:${FRAME_COLORS[(FM[r.num - 1] || 1) - 1]};color:${[1, 5].includes(FM[r.num - 1] || 1) ? '#111' : '#fff'}">${r.num}</span></td><td>${esc(r.name)}${cfg.rival && r.name === cfg.rival ? '<em>ライバル</em>' : ''}<small>${esc(r.jname || '')}</small></td><td>${wt}<small>(${dw > 0 ? '+' : ''}${dw})</small></td><td class="kh k${c}">${KEHAI[c]}</td></tr>`;
     }).join('');
     $('h-pre').innerHTML = `<div class="pre-card"><h2>🐎 パドック</h2><p class="small">${esc(cfg.race.name)}　${cfg.race.surf}${cfg.race.dist}m　${race.racers.length}頭</p>
       <div class="pre-me">あなたの馬 <b>${pl.num}番 ${esc(pl.name)}</b>：<span class="k${pl._kehai}">${KEHAI[pl._kehai]} ${KEHAI_T[pl._kehai]}</span></div>
       <div class="res-table"><table><tr><th>番</th><th>馬名 / 騎手</th><th>馬体重</th><th>気配</th></tr>${rows}</table></div>
       <div class="row2"><button class="btn red" id="pre-go">本馬場入場 ▶</button><button class="btn ghost" id="pre-skip">スキップ</button></div></div>`;
     $('h-pre').classList.remove('hidden');
-    const toGate = () => { if (phase === 'race') return; phase = 'race'; root.classList.remove('pre'); $('h-pre').classList.add('hidden'); view.setView(userView); $('h-view').textContent = viewNames[userView]; A.stopBgm(); A.crowdLevel(0.08); };
+    const toGate = () => { if (phase === 'race') return; phase = 'race'; root.classList.remove('pre'); $('h-pre').classList.add('hidden'); const v0 = startCut && !race.started ? 'start' : userView; view.setView(v0); $('h-view').textContent = viewNames[v0]; A.stopBgm(); A.crowdLevel(0.08); };
     $('pre-skip').onclick = toGate;
     $('pre-go').onclick = () => {
       phase = 'parade'; A.stopBgm();
@@ -162,6 +168,7 @@ export function startRace(cfg) {
     };
   } else if (SPEC) { A.fanfare(big ? 'g1' : 'normal'); }
 
+  if (!preOn && startCut) { view.setView('start'); $('h-view').textContent = viewNames.start; }
   let last = performance.now(), acc = 0, raf = 0, ended = false, endT = 0, lastStep = 0, blockedT = 0, lastCount = 3;
   let playerFell = false;
   if (!preOn) say('3', 1);
@@ -178,6 +185,7 @@ export function startRace(cfg) {
       stepRace(race, 1 / 60, input); input.whip = false; input.god = false; acc -= 1 / 60; steps++;
       if (race.started && !(ended && endT > 5)) record();
     }
+    if (view.view === 'start' && race.started && race.t > 2.6) endStartCut();
     // イベント
     for (const ev of race.events.splice(0)) {
       if (ev.type === 'start') { say('スタート！', 1.2, 'big'); A.gateOpen(); if (cfg.rival) setTimeout(() => say(`ライバル ${cfg.rival} も一緒に走る！`, 1.8), 1500); }
@@ -209,7 +217,7 @@ export function startRace(cfg) {
     }
     if (race.countdown > 0) {
       const c = Math.ceil(race.countdown);
-      if (c !== lastCount && c > 0) { lastCount = c; say(String(c), 0.9, 'big'); }
+      if (c !== lastCount && c > 0 && c <= 3) { lastCount = c; say(String(c), 0.9, 'big'); }
     }
     caller.update(dt * (race.countdown > 0 ? 0 : 1));
     if (caller.lines.length) { $('h-call').textContent = caller.lines[caller.lines.length - 1]; $('h-call').classList.add('show'); caller.lines.length = 0; }

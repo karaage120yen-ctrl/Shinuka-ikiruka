@@ -266,3 +266,101 @@ export function blobTex() {
   x.fillStyle = g; x.fillRect(0, 0, 128, 128);
   const t = new THREE.CanvasTexture(c); return t;
 }
+// 目玉（白目・黒目・光）。球のu=0.5,v=0.5 が見る向き
+let EYE_T = null;
+export function eyeTex() {
+  if (EYE_T) return EYE_T;
+  const W = 512, H = 256, c = canvas(W, H), x = c.getContext('2d');
+  x.fillStyle = '#fbf8f1'; x.fillRect(0, 0, W, H);
+  // 白目のふちのかげ
+  const sg = x.createRadialGradient(W / 2, H / 2, 40, W / 2, H / 2, 150); sg.addColorStop(0, 'rgba(0,0,0,0)'); sg.addColorStop(1, 'rgba(90,70,60,0.35)');
+  x.fillStyle = sg; x.fillRect(0, 0, W, H);
+  const cx = W / 2, cy = H / 2, R = 78;
+  const ig = x.createRadialGradient(cx, cy + 6, 6, cx, cy, R);
+  ig.addColorStop(0, '#120a05'); ig.addColorStop(0.42, '#2a170c'); ig.addColorStop(0.78, '#4a2a14'); ig.addColorStop(0.93, '#2a170c'); ig.addColorStop(1, '#120904');
+  x.fillStyle = ig; x.beginPath(); x.arc(cx, cy, R, 0, Math.PI * 2); x.fill();
+  x.fillStyle = '#050302'; x.beginPath(); x.arc(cx, cy + 2, R * 0.46, 0, Math.PI * 2); x.fill();
+  // 光
+  x.fillStyle = '#ffffff'; x.beginPath(); x.ellipse(cx - 18, cy - 32, 20, 16, -0.3, 0, Math.PI * 2); x.fill();
+  x.beginPath(); x.arc(cx + 24, cy + 30, 8, 0, Math.PI * 2); x.fill();
+  EYE_T = new THREE.CanvasTexture(c); EYE_T.colorSpace = THREE.SRGBColorSpace; EYE_T.anisotropy = 4;
+  return EYE_T;
+}
+// 顔の色（鼻先のかげ・流星）。頭のロフトのuv：u=後ろ→鼻先、v=横→顔の正面(0.25)→反対の横→あご
+const HEADT = {};
+export function headTex(body, muzzle, blaze, umap) {
+  const key = body + '_' + muzzle + '_' + blaze;
+  if (HEADT[key]) return HEADT[key];
+  const W = 256, H = 256, c = canvas(W, H), x = c.getContext('2d');
+  const cb = new THREE.Color(body), cm = new THREE.Color(muzzle);
+  const css = (col) => '#' + col.getHexString();
+  const sb = cb, sm = cm;
+  const g = x.createLinearGradient(0, 0, W, 0);
+  g.addColorStop(0, css(sb)); g.addColorStop(umap(0.55), css(sb)); g.addColorStop(umap(0.68), css(sm)); g.addColorStop(1, css(sm));
+  x.fillStyle = g; x.fillRect(0, 0, W, H);
+  // あごの下は少し明るく、目のまわりは少し濃く
+  const vy = (v) => (1 - v) * H;
+  if (blaze) {
+    x.fillStyle = '#f6f2ea';
+    const pts = blaze === 1 ? [[0.08, 0.035], [0.13, 0.05], [0.19, 0.03], [0.22, 0.0]] : blaze === 2 ? [[0.06, 0.02], [0.1, 0.045], [0.3, 0.025], [0.5, 0.02], [0.62, 0.035], [0.68, 0.05], [0.7, 0.0]] : [[0.05, 0.025], [0.1, 0.06], [0.3, 0.045], [0.5, 0.04], [0.6, 0.06], [0.68, 0.075], [0.74, 0.07]];
+    x.beginPath();
+    pts.forEach(([u, w], i) => { const X = umap(u) * W, Y = vy(0.25 + w); i ? x.lineTo(X, Y) : x.moveTo(X, Y); });
+    for (let i = pts.length - 1; i >= 0; i--) { const [u, w] = pts[i]; x.lineTo(umap(u) * W, vy(0.25 - w)); }
+    x.closePath(); x.filter = 'blur(2px)'; x.fill(); x.filter = 'none';
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  return (HEADT[key] = t);
+}
+// ゲート上の横断幕（赤地・金のふち・白っぽい金文字）
+export function bannerTex(text) {
+  const w = 1024, h = 128, c = canvas(w, h), x = c.getContext('2d');
+  if (MIRROR) { x.translate(w, 0); x.scale(-1, 1); }
+  const g = x.createLinearGradient(0, 0, 0, h); g.addColorStop(0, '#e0242a'); g.addColorStop(0.55, '#c3161c'); g.addColorStop(1, '#8e0d12');
+  x.fillStyle = g; x.fillRect(0, 0, w, h);
+  x.fillStyle = '#f3c84b'; x.fillRect(0, 8, w, 6); x.fillRect(0, h - 14, w, 6);
+  // 両はしの菱形の飾り
+  for (const cx of [40, w - 40]) { x.save(); x.translate(cx, h / 2); x.rotate(Math.PI / 4); x.fillStyle = '#f7f1dc'; x.fillRect(-19, -19, 38, 38); x.fillStyle = '#d8a93a'; x.fillRect(-11, -11, 22, 22); x.restore(); }
+  const size = Math.min(80, Math.floor((w - 160) / Math.max(4, [...String(text)].length) * 1.05));
+  x.font = `900 ${size}px "Hiragino Mincho ProN","Noto Serif JP","Hiragino Sans","Noto Sans JP",serif`;
+  x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.lineJoin = 'round'; x.strokeStyle = '#5a0608'; x.lineWidth = 10; x.strokeText(text, w / 2, h / 2 + 4);
+  const tg = x.createLinearGradient(0, h / 2 - size / 2, 0, h / 2 + size / 2); tg.addColorStop(0, '#fff7d6'); tg.addColorStop(0.6, '#ffe07a'); tg.addColorStop(1, '#e7b23a');
+  x.fillStyle = tg; x.fillText(text, w / 2, h / 2 + 4);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+  return t;
+}
+// ゲートのクッション（白い板にうっすらステッチ）
+export function padTex() {
+  const c = canvas(128, 128), x = c.getContext('2d');
+  const g = x.createLinearGradient(0, 0, 0, 128); g.addColorStop(0, '#fbfbf8'); g.addColorStop(1, '#dcdedb');
+  x.fillStyle = g; x.fillRect(0, 0, 128, 128);
+  x.strokeStyle = 'rgba(120,130,125,0.35)'; x.lineWidth = 2;
+  for (let i = 1; i < 4; i++) { x.beginPath(); x.moveTo(i * 32, 6); x.lineTo(i * 32, 122); x.stroke(); }
+  x.strokeRect(4, 4, 120, 120);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+// もくもくの雲（ビルボード用）。seedで形を変える
+export function cloudTex(seed = 1) {
+  const W = 512, H = 256, c = canvas(W, H), x = c.getContext('2d');
+  let s = seed * 7919 + 13; const R = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
+  const puffs = [];
+  const n = 9 + Math.floor(R() * 6);
+  for (let i = 0; i < n; i++) {
+    const t = i / (n - 1), cx = 60 + t * (W - 120) + (R() - 0.5) * 30;
+    const r = (40 + Math.sin(t * Math.PI) * 70) * (0.75 + R() * 0.45);
+    puffs.push([cx, H - 50 - r * (0.55 + R() * 0.35), r]);
+  }
+  for (let i = 0; i < 6; i++) { const cx = 120 + R() * (W - 240); puffs.push([cx, H - 40 - R() * 30, 30 + R() * 30]); }
+  x.filter = 'blur(1.5px)';
+  x.fillStyle = '#ffffff';
+  for (const [cx, cy, r] of puffs) { x.beginPath(); x.arc(cx, cy, r, 0, Math.PI * 2); x.fill(); }
+  x.fillRect(70, H - 62, W - 140, 22);
+  // 下側のかげ（青みのある灰色）と、ふくらみごとのかげ
+  x.globalCompositeOperation = 'source-atop'; x.filter = 'blur(8px)';
+  for (const [cx, cy, r] of puffs) { const g = x.createRadialGradient(cx - r * 0.25, cy - r * 0.35, r * 0.2, cx, cy, r * 1.05); g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(0.75, 'rgba(205,215,232,0.0)'); g.addColorStop(1, 'rgba(190,202,224,0.55)'); x.fillStyle = g; x.beginPath(); x.arc(cx, cy, r, 0, Math.PI * 2); x.fill(); }
+  const gb = x.createLinearGradient(0, H * 0.35, 0, H - 40); gb.addColorStop(0, 'rgba(180,192,215,0)'); gb.addColorStop(1, 'rgba(170,184,210,0.75)');
+  x.fillStyle = gb; x.fillRect(0, 0, W, H);
+  x.globalCompositeOperation = 'source-over'; x.filter = 'none';
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
