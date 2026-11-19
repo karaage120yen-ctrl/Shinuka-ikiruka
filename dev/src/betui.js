@@ -5,6 +5,10 @@ import { simulateField } from './sim.js';
 import { startRace } from './racescreen.js';
 import { fmtTime } from './data.js';
 import { checkAch } from './ach.js';
+import { mission } from './mission.js';
+import { NPC_JOCKEY } from './jockey.js';
+import { syncRank } from './onlineui.js';
+import * as A from './audio.js';
 import { NET, online, onNet, joinRoomLive, pushMember, callWatch, me } from './net.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -28,7 +32,7 @@ const raceOf = (c, no) => c.races.find(r => r.no === no);
 function toast(t) { const el = document.createElement('div'); el.className = 'toast'; el.textContent = t; document.body.appendChild(el); setTimeout(() => el.classList.add('show'), 10); setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 400); }, 2200); }
 
 let inBet = false, seenWatch = 0, watchTimer = null;
-export function openBet(homeFn) { goHome = () => { inBet = false; homeFn(); }; inBet = true; st(); joinRoomLive(st().room); drawLobby(); }
+export function openBet(homeFn) { goHome = () => { inBet = false; homeFn(); }; inBet = true; A.playBgm('paddock'); st(); joinRoomLive(st().room); drawLobby(); }
 // ルームのみんなの動きが届いたら、その部分だけ描き直す
 onNet(() => {
   if (!inBet) return;
@@ -97,6 +101,10 @@ function drawLobby() {
       return `<button class="ritem ${res ? 'locked' : ''}" data-a="race" data-v="${r.no}"><div><span class="mmk">${r.no}R</span>${r.g ? `<span class="grade g-${r.g}">${r.g}</span>` : ''}<b>${esc(r.name)}</b></div>
       <small>${r.start}発走　${r.surf === 'ダ' ? 'ダート' : '芝'}${r.dist}m　${r.horses.length}頭${tk.length ? `　🎫${tk.length}枚` : ''}${res ? `　確定：${res.order.slice(0, 3).join('-')}${res.ret ? `　<b class="gold">払戻 ${cn(res.ret)}</b>` : ''}` : ''}</small></button>`; }).join('')}</div>
     ${done === c.races.length ? '<button class="btn red wide" data-a="nextday">次の開催日へ</button>' : ''}
+    ${!st().room && S.horses.length ? `<div class="kick">🐴 自分の馬を走らせる</div>
+    <p class="note">育てた馬が「特別レース」に出る。相手は強さの近い馬ばかりなので、いい勝負になる。もちろん賭けられる。</p>
+    <div class="row2"><select id="myh">${S.horses.map((h, i) => `<option value="${i}">${esc(h.name)}（${h.rank || ''}）</option>`).join('')}</select><select id="myj"><option value="-1">厩舎の主戦騎手</option>${S.jockeys.map((j, i) => `<option value="${i}">⭐${esc(j.name)}</option>`).join('')}</select></div>
+    <button class="btn race wide" data-a="myrace">特別レースを組む</button>` : ''}
     <div id="livebox">${liveHtml(c)}</div>
     <div class="kick">ルーム（友達と同じレースで勝負）</div>
     <p class="note">同じルームコードを入れた人は、<b>出馬表・オッズ・レース結果が全員同じ</b>になる。${online() ? 'オンラインなので、みんなの馬券と収支がリアルタイムで見える。「一緒に見る」で同時に観戦もできる。' : 'それぞれ馬券を買って、最後に「結果コード」を送り合うと順位がわかる。'}</p>
@@ -134,6 +142,7 @@ function bindL() {
     if (a === 'nextday') { b.week++; save(); return drawLobby(); }
     if (a === 'join') { const v2 = document.getElementById('rcode').value.trim().toUpperCase().replace(/[^A-Z0-9]/g, ''); if (!v2) return toast('ルームコードを入れてください'); b.room = v2; b.week = 0; save(); toast(`ルーム ${v2} に入りました`); checkAch('room'); joinRoomLive(v2); return drawLobby(); }
     if (a === 'newroom') { const cs = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let code = ''; for (let i = 0; i < 5; i++) code += cs[Math.floor(Math.random() * cs.length)]; b.room = code; b.week = 0; save(); navigator.clipboard && navigator.clipboard.writeText(code).catch(() => {}); toast(`ルーム ${code} を作りました（コピー済み）`); checkAch('room'); joinRoomLive(code); return drawLobby(); }
+    if (a === 'myrace') { const c = card(); const h = S.horses[+document.getElementById('myh').value], jv = +document.getElementById('myj').value, jk = jv >= 0 ? S.jockeys[jv] : NPC_JOCKEY; const r = B.makeMyRace(c, h, jk); save(); toast(`${r.name}を組みました`); UI.race = r.no; UI.sel = [[], [], []]; return openRace(r.no); }
     if (a === 'leave') { b.room = ''; b.week = 0; save(); joinRoomLive(''); return drawLobby(); }
     if (a === 'setname') { b.name = document.getElementById('pname').value.trim().slice(0, 10); save(); sync(); toast('名前を決めました'); return drawLobby(); }
     if (a === 'share') {
@@ -295,12 +304,16 @@ function runResult(r, live) {
     c.results[r.no] = { order, ret, list: list.map(x => ({ num: x.num, name: x.name, time: x.time, margin: x.margin })) };
     save(); drawRace();
     if (ret > 0) toast(`的中！ ${cn(ret)}コインの払い戻し`);
+    if (r.mine) { const me2 = list.find(x => x.name === r.mine); if (me2) { setTimeout(() => toast(`あなたの馬 ${r.mine} は ${me2.dnf ? '競走中止' : me2.pos + '着'}！${me2.pos === 1 ? ' 🥕+5' : ''}`), 1200); if (me2.pos === 1 && !me2.dnf) { S.carrots += 5; mission('win'); } } }
+    mission('bet', tk.length); if (ret > 0) mission('hit'); syncRank();
     checkAch('bet', { ret, tickets: tk, hits: tk.flatMap(t => t.hits || []) });
   };
   if (!live) { fin(simulateField(B.specsOf(r), r, seed)); return; }
   // 注目する馬（最初に買った馬券の1頭目、なければ1番人気）
   const tk = c.tickets[r.no] || [];
   let focus = tk.length ? (B.typeOf(tk[0].type).frame ? r.horses.find(h => h.frame === tk[0].combos[0][0]).num : tk[0].combos[0][0]) : r.horses.find(h => h.pop === 1).num;
+  if (r.mine) focus = r.horses.find(h => h.mine).num;
+  mission('race3d');
   startRace({ spectate: true, seed, specs: B.specsOf(r), focus: focus - 1, race: { name: `${r.no}R ${r.name}`, g: r.g, dist: r.dist, surf: r.surf, place: r.place },
     onDone: (res) => { if (!res) { fin(simulateField(B.specsOf(r), r, seed)); return; } fin(res.list); } });
 }

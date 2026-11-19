@@ -272,3 +272,28 @@ export function mcPrice(card, r, n = 40, onProgress) {
 }
 
 export function cardKey(weekOffset = 0, room = '') { const d = raceDay(weekOffset); return `${room || 'solo'}|${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; }
+
+// ===== 自分の馬が出る特別レース（強さの近い相手をそろえて、いい勝負にする） =====
+export function makeMyRace(card, h, jk) {
+  const R = rng(hashStr(`${card.key}|my|${h.name}|${(card.myN || 0)}`));
+  const surf = APT_ORDER(h.apt.turf) >= APT_ORDER(h.apt.dirt) ? '芝' : 'ダ';
+  const dist = h.s.sta >= 82 ? 2400 : h.s.sta >= 70 ? 2000 : h.s.sta >= 58 ? 1800 : 1600;
+  const myEff = strength({ h: { ...h.s }, j: { ...jk.s }, apt: surf === '芝' ? h.apt.turf : h.apt.dirt, cond: 2 }, dist);
+  const base = (h.s.spd + h.s.pow + h.s.gut + h.s.wis) / 4;
+  const r = { no: 7, name: `★${h.name}特別`, cls: 'オープン', g: null, age: '3+', dist, surf, place: card.place, lv: base, start: '16:25', mine: h.name, weather: card.races[0].weather, going: card.races[0].going };
+  const field = makeField({ ...r, lv: base }, R).slice(0, 12);
+  // 相手の強さを、自分の馬のまわりに散らす（上にも下にも）
+  const offs = [3.5, 2.5, 1.5, 1, 0.5, 0, -0.5, -1.5, -2.5, -3.5, -5];
+  field.slice(1).forEach((x, i) => { const o = offs[i] + (R() - 0.5) * 1.2; for (const k of ['spd', 'pow', 'gut', 'wis']) x.h[k] = clamp(h.s[k] + o + (R() - 0.5) * 6, 5, 105); x.h.sta = clamp(Math.max(h.s.sta + o + (R() - 0.5) * 8, (dist * 1.1 - 1100) / 24), 5, 105); x.apt = 'A'; const jl = (jk.s.tec + jk.s.jud) / 2 + (R() - 0.5) * 12; x.j = { tec: jl, whip: jl + (R() - 0.5) * 8, bal: jl + (R() - 0.5) * 8, fit: jl + (R() - 0.5) * 8, jud: jl + (R() - 0.5) * 8 }; x.jlv = Math.round(jl); });
+  const me = field[0];
+  Object.assign(me, { name: h.name, h: { ...h.s }, j: { ...jk.s }, jname: jk.name, jlv: Math.round((jk.s.tec + jk.s.jud) / 2), apt: surf === '芝' ? h.apt.turf : h.apt.dirt, cond: 2, style: h.style, coat: h.coat, mine: true, sex: h.sex || '牡', age: Math.min(7, h.age || 4), prev: null });
+  // 枠をまぜる（自分の馬がいつも1番にならないように）
+  const ord = field.map((x, i) => [R(), i]).sort((a, b) => a[0] - b[0]).map(x => field[x[1]]);
+  ord.forEach((x, i) => { x.num = i + 1; });
+  const fr = frameMap(ord.length); ord.forEach((x, i) => { x.frame = fr[i]; });
+  r.horses = ord; priceRace(r); r.myEff = myEff;
+  card.myN = (card.myN || 0) + 1;
+  card.races = card.races.filter(x => !x.mine || card.results[x.no]); r.no = 7 + card.races.filter(x => x.mine).length; card.races.push(r);
+  return r;
+}
+const APT_ORDER = (a) => 'GFEDCBA'.indexOf(a);

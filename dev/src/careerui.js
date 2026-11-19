@@ -8,6 +8,11 @@ import { NPC_JOCKEY } from './jockey.js';
 import { playCuts } from './cut.js';
 import { NPC_SIRES, NPC_DAMS, makeFoal, preview, sexOf } from './breed.js';
 import { checkAch } from './ach.js';
+import { playBgm } from './audio.js';
+import { deckFx, GACHA_POOL, charLabel } from './gacha.js';
+import { bondN, bondLv, BOND_NAME, addBond, applyBond } from './combo.js';
+import { randomHorseName, randomJockeyName, H_KEYS } from './data.js';
+import { mission } from './mission.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const hex = (n) => '#' + (n ?? 0xffffff).toString(16).padStart(6, '0');
@@ -19,6 +24,7 @@ const slot = (kind) => kind === 'horse' ? 'activeHorse' : 'activeJockey';
 const getC = (kind = KINDNOW) => S[slot(kind)];
 
 export function openCareer(kind, homeFn) {
+  playBgm('farm');
   KINDNOW = kind; goHome = homeFn;
   let C = getC();
   if (C && !C.p) { S[slot(kind)] = null; C = null; } // 古い形式のデータは捨てる
@@ -44,7 +50,7 @@ function pcard(p, mode = 'full') {
   let sub, tags, face;
   if (p.kind === 'horse') {
     sub = `${p.age}歳・${K.STAGE_NAME[st]}`;
-    tags = [p.sex || '', p.style, G.n, `芝${p.apt.turf}・ダ${p.apt.dirt}`].filter(Boolean).map(t => `<span>${esc(t)}</span>`).join('');
+    tags = [p.sex || '', p.style, G.n, `芝${p.apt.turf}・ダ${p.apt.dirt}`].filter(Boolean).map(t => `<span>${esc(t)}</span>`).join('') + (p.rival && !pre ? `<span class="rv">ライバル ${esc(p.rival.name)} ${p.rival.w || 0}勝${p.rival.l || 0}敗</span>` : '');
     face = `<div class="face" style="--c:${hex(COAT[p.coat].body)}">🐴</div>`;
   } else {
     const sb = K.stableOf(p);
@@ -131,7 +137,7 @@ function drawDraft() {
     : `<dl class="scout"><div><dt>得意な戦法</dt><dd>${p.pref}</dd></div><div><dt>成長タイプ</dt><dd>${G[p.growth].n}<small>${G[p.growth].d}</small></dd></div><div><dt>スカウト評価</dt><dd>${p.flags.potEst}<small>伸びしろの見立て（SS〜D）</small></dd></div></dl>`;
   app.innerHTML = `${header(H ? '馬の育成' : '騎手の育成')}<div class="page career">
     <div class="kick">${H ? '牧場レポート' : 'スカウトレポート'}<span class="r">No.${String(d.n).padStart(3, '0')}</span></div>
-    <p class="note">${lead}</p>${pcard(p, 'preview')}${scout}${inh}
+    <p class="note">${lead}</p>${pcard(p, 'preview')}${scout}${inh}${supHtml(d.kind)}
     <div class="stack"><button class="btn red" data-act="dstart">${H ? 'この馬で始める' : 'この騎手で始める'}</button><button class="btn ghost" data-act="dreroll">${d.custom ? '能力を引き直す' : H ? '別の馬を探す' : '別の人を探す'}</button>
     ${H ? `<button class="btn race" data-act="dbreed">🧬 配合して産ませる（父と母を選ぶ）</button>` : ''}</div>
     ${d.bred ? `<p class="note">配合で生まれた仔。父${esc(p.sire)}・母${esc(p.dam)}${p.gen >= 2 ? `　自分の血統 ${p.gen}代目` : ''}</p>` : ''}
@@ -152,6 +158,10 @@ function drawDraft() {
       const p2 = d.prev; p2.id = newId();
       const pars = d.parents.map(i => pool[i]).filter(Boolean);
       const got = K.inherit(p2, pars);
+      // サポートの効果
+      p2.sup = deckFx(d.kind, (S.deck || {})[d.kind], S.gacha);
+      for (const [k, v] of Object.entries(p2.sup.start)) { p2.st[k] = Math.min(99, p2.st[k] + v); }
+      if (p2.sup.ids.length) got.push(`サポート ${p2.sup.ids.length}人の力を借りる`);
       if (d.bred && d.damRef && !d.damRef.npc) d.damRef.foals = (d.damRef.foals || 0) + 1;
       if (d.bred && (!d.sireRef.npc || !d.damRef.npc)) checkAch('breed', { gen: p2.gen });
       if (H && pars[0]) { p2.sire = pars[0].name; if (pars[1]) p2.dam = pars[1].name; }
@@ -162,6 +172,11 @@ function drawDraft() {
       S._draft = null; save(); draw();
     }
   });
+}
+
+function supHtml(kind) {
+  const deck = ((S.deck || {})[kind] || []).filter(id => (S.gacha || []).includes(id));
+  return `<div class="kick">サポート編成（ガチャ）</div><p class="note">${deck.length ? deck.map(id => { const c = GACHA_POOL.find(x => x.id === id); return c ? `<b class="r-${c.rarity}">${c.rarity}</b> ${esc(charLabel(c))}` : ''; }).join('<br>') : 'まだ誰も編成していない（ガチャ画面の「編成」で3人まで選べる）'}</p>`;
 }
 
 // ===== 配合 =====
@@ -298,7 +313,7 @@ SCREENS.afterEvents = (C) => {
   return `${pcard(p, 'compact')}<div class="kick">${r.m}月　出走</div>
   <div class="evcard legend"><h2>${r.g ? `<span class="grade g-${r.g}">${r.g}</span>` : ''}${esc(r.name)}</h2><p>${r.abroad ? `🌍 ${r.abroad}・` : ''}${r.place || ''} ${r.surf === 'ダ' ? 'ダート' : '芝'}${r.dist}m${r.prize ? `　1着賞金 ${yen(r.prize)}` : ''}</p><p class="sub">天気 ${r.weather || '晴'}・馬場 ${r.going || '良'}${r.cost ? `・遠征費 ${yen(r.cost)}` : ''}</p>
   ${H ? `<p class="sub">体力 ${Math.round(p.sta)}・調子 ${COND_NAMES[K.condIdx(p)]}${p.sta < 30 ? '（疲れが残っている…）' : ''}</p>` : `<p class="sub">${r.mock ? '学校の馬に乗る' : '依頼された馬に乗る'}</p>`}</div>
-  ${H ? `<div class="label">騎手</div><div class="chips">${jks.map((j, i) => `<button class="chip ${((p.jockeyId ?? null) === (j.id ?? null)) ? 'on' : ''}" data-act="jk" data-v="${i}">${esc(j.name)}${j.rank ? `<small>${j.rank}</small>` : ''}</button>`).join('')}</div>` : ''}
+  ${H ? `<div class="label">騎手</div><div class="chips">${jks.map((j, i) => `<button class="chip ${((p.jockeyId ?? null) === (j.id ?? null)) ? 'on' : ''}" data-act="jk" data-v="${i}">${esc(j.name)}${j.rank ? `<small>${j.rank}</small>` : ''}${j.id != null ? `<small>🤝${BOND_NAME[bondLv(bondN(p.id, j.id))]}</small>` : ''}</button>`).join('')}</div>` : ''}
   <div class="label">作戦</div><div class="chips">${STYLES.map(s => `<button class="chip ${s === C.style ? 'on' : ''}" data-act="style" data-v="${s}">${s}</button>`).join('')}</div>
   <div class="howto"><b>操作</b>　◀▶で進路、ムチで加速（体力が減りやすい）。体力ゲージが0になると失速。スマホは横向きがおすすめ。</div>
   <div class="stack"><button class="btn race" data-act="ride3d">🏇 自分で乗る（3Dレース）</button><button class="btn ghost" data-act="rideAuto">結果だけ見る</button></div>`;
@@ -313,7 +328,7 @@ SCREENS.mres = (C) => {
   const F = R.fate;
   const fb = F ? `<div class="fate ${F.ty}"><b>${esc(F.head)}</b><p>${esc(F.why)}${F.ty === 'retire' ? '。ここで現役生活が終わる。' : '。'}</p></div>` : '';
   const next = F ? (F.ty === 'death' ? 'お別れへ' : '引退へ') : K.isLastTurnOfYear(p) ? '年間総括へ' : `${(K.KIND[p.kind].turns.find(x => x > p.month) || 1)}月へ`;
-  const races = R.races.map(x => `<li class="mt"><span class="md">${x.m}月</span><span class="mo"><small>${x.g ? x.g + '・' : ''}${x.surf}${x.dist}m${x.horse ? '・' + esc(x.horse) : ''}</small>${esc(x.name)}<small>${fmtTime(x.time)}${x.prize ? '・賞金 ' + yen(x.prize) : ''}</small></span><span class="ms ${x.pos === 1 ? 'w' : x.pos <= 3 ? 'd' : 'l'}"><i>${x.pos}着</i>/${x.field}</span></li>`).join('');
+  const races = R.races.map(x => `<li class="mt"><span class="md">${x.m}月</span><span class="mo"><small>${x.g ? x.g + '・' : ''}${x.surf}${x.dist}m${x.horse ? '・' + esc(x.horse) : ''}</small>${esc(x.name)}<small>${fmtTime(x.time)}${x.prize ? '・賞金 ' + yen(x.prize) : ''}</small></span><span class="ms ${x.dnf ? 'l' : x.pos === 1 ? 'w' : x.pos <= 3 ? 'd' : 'l'}"><i>${x.dnf ? '中止' : x.pos + '着'}</i>/${x.field}</span></li>`).join('') + (C.rivalNote ? `<li class="mt"><span class="md">⚔</span><span class="mo"><small>ライバル対決</small>${esc(C.rivalNote)}</span></li>` : '');
   return `${fb}${pcard(p, 'compact')}
   <div class="kick">${R.y}年${R.m}–${R.m1}月の結果<span class="r">${esc(R.act)}</span></div>
   ${R.ev ? `<p class="note">このターンの出来事：${esc(R.ev.t)}（${esc(R.ev.l)}）</p>` : ''}
@@ -374,7 +389,7 @@ SCREENS.offers = (C) => {
 function doRetire(C) {
   const p = C.p;
   const card = K.toCard(p);
-  card.id = newId();
+  card.id = p.id ?? newId();
   if (p.kind === 'horse') S.horses.unshift(card); else S.jockeys.unshift(card);
   const bonus = 20 + Math.round((p.g1Wins || 0) * 20 + (p.gradedWins || 0) * 5);
   S.carrots += bonus;
@@ -491,7 +506,15 @@ function raceCfg(C) {
   const p = C.p, r = C.raceSel;
   if (p.kind === 'horse') {
     const jk = S.jockeys.find(j => j.id === p.jockeyId) || NPC_JOCKEY;
-    const cfg = K.horseRaceCfg(p, r, jk); cfg.player.style = C.style || p.style; return cfg;
+    const cfg = K.horseRaceCfg(p, r, jk); cfg.player.style = C.style || p.style;
+    if (jk.id != null) { cfg.player = applyBond(cfg.player, bondN(p.id, jk.id)); cfg.bond = [p.id, jk.id]; }
+    // ライバル馬
+    if (!p.rival && K.stageOf(p) === 'tc') p.rival = makeRival(p);
+    if (p.rival && (r.g === 'G1' ? 0.85 : r.g ? 0.6 : 0.3) > Math.random() && !r.abroad === !p.rival.abroad) {
+      growRival(p);
+      cfg.opponents = [rivalSpec(p.rival)]; cfg.rival = p.rival.name;
+    }
+    return cfg;
   }
   const cfg = K.jockeyRaceCfg(p, r); if (C.style) cfg.player.style = C.style; return cfg;
 }
@@ -499,13 +522,31 @@ function runRace(C, live) {
   const cfg = raceCfg(C);
   const done = (res) => {
     if (!res) { C.raceSel = null; C.act = 'rest'; runTurnC(C); save(); draw(); return; }
-    res.jname = cfg.player.jname;
+    afterRace(C, cfg, res, live);
     C.raceRes = res; runTurnC(C); save(); draw();
   };
   if (!live) { done(simulateRace(cfg)); return; }
   stopAuto(C);
   startRace({ ...cfg, onDone: done });
 }
+function afterRace(C, cfg, res, live) {
+    res.jname = cfg.player.jname;
+    if (cfg.bond) addBond(cfg.bond[0], cfg.bond[1]);
+    if (cfg.rival && C.p.rival && res.list) {
+      const rv = res.list.find(x => x.name === cfg.rival), me = res.list.find(x => x.isPlayer);
+      if (rv && me) { const R2 = C.p.rival; R2.n = (R2.n || 0) + 1; if (me.pos < rv.pos) R2.w = (R2.w || 0) + 1; else R2.l = (R2.l || 0) + 1; R2.last = `${C.raceSel.name}：あなた${me.dnf ? '中止' : me.pos + '着'}・${R2.name}${rv.dnf ? '中止' : rv.pos + '着'}`; if (rv.pos === 1 && C.raceSel.g) R2.titles = [...(R2.titles || []), C.raceSel.name]; C.rivalNote = R2.last; }
+    }
+    mission('race'); if (live) mission('race3d');
+}
+
+// ===== ライバル馬 =====
+function makeRival(p) {
+  const off = {}; H_KEYS.forEach(k => { off[k] = (Math.random() - 0.5) * 6; });
+  const st = {}; H_KEYS.forEach(k => { st[k] = p.st[k] + off[k]; });
+  return { name: randomHorseName(), jname: randomJockeyName(), st, off, style: ['逃げ', '先行', '差し', '追込'][Math.floor(Math.random() * 4)], coat: Math.floor(Math.random() * COAT.length), silk: SILKS[(Math.floor(Math.random() * 7) * 3 + 1) % SILKS.length], w: 0, l: 0, n: 0 };
+}
+function growRival(p) { const R2 = p.rival; H_KEYS.forEach(k => { R2.st[k] += (p.st[k] + R2.off[k] - R2.st[k]) * 0.5 + (Math.random() - 0.5) * 1.5; }); }
+function rivalSpec(R2) { const jl = 52; return { name: R2.name, jname: R2.jname, h: { ...R2.st }, j: { tec: jl, whip: jl, bal: jl, fit: jl, jud: jl }, apt: 'A', cond: 2, style: R2.style, coat: R2.coat, silk: R2.silk }; }
 
 // ===== ターンの結果からカットシーンを決める =====
 function runTurnC(C) {
@@ -520,6 +561,8 @@ function runTurnC(C) {
   if (p.kind === 'horse' && n0 === 0 && (p.races || []).length > 0) q.unshift({ k: 'debut', t: 'デビュー！', s: res.races[0] ? res.races[0].name : '', d: 2000 });
   for (const k of res.skills || []) q.push({ k: 'skill', t: `「${K.SKILLS[k].n}」習得！`, s: K.SKILLS[k].d, d: 1800 });
   if ((res.races || []).some(r => r.abroad)) q.unshift({ k: 'abroad', t: '海外遠征', s: res.races.find(r => r.abroad).abroad + 'へ', d: 1600 });
+  for (const r of res.races || []) if (r.dnf && !res.fate) q.push({ k: 'injury', t: '落馬・競走中止', s: r.name, d: 2400 });
+  mission('turn'); if ((res.races || []).some(r => r.pos === 1 && !r.dnf)) mission('win');
   if (!p.flags.inj2 && p.inj >= 12 && !res.fate) { p.flags.inj2 = 1; q.push({ k: 'injury', t: '大きなケガ', s: `${p.injName}（全治${Math.ceil(p.inj)}週）`, d: 2200 }); }
   if (p.inj < 12) p.flags.inj2 = 0;
   checkAch('turn', { p, res });
@@ -545,7 +588,7 @@ function autoStep(C) {
       C.act = a.id; K.confirmAction(C); break;
     }
     case 'event': if (!C.evr) K.chooseEvent(C, K.autoPickChoice(C)); else K.nextEvent(C); break;
-    case 'afterEvents': if (C.raceSel) { const cfg = raceCfg(C); const res = simulateRace(cfg); res.jname = cfg.player.jname; C.raceRes = res; } runTurnC(C); break;
+    case 'afterEvents': if (C.raceSel) { const cfg = raceCfg(C); const res = simulateRace(cfg); afterRace(C, cfg, res); C.raceRes = res; } runTurnC(C); break;
     case 'mres': K.afterTurn(C); break;
     case 'report': K.buildOffers(C); break;
     case 'offers': {

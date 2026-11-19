@@ -7,6 +7,12 @@ window.__race3d = (o) => startRace({ race: { name: 'テスト', dist: o.dist || 
 
 home();
 initNet();
+// 最初にさわったときに音を使えるようにする（スマホは操作がないと音が出せない）
+import * as A from './audio.js';
+import { S } from './store.js';
+const unlock = () => { A.setSound(S.settings.sound); A.setVolumes(S.settings.vol); A.initAudio(); };
+document.addEventListener('pointerdown', unlock, { passive: true });
+document.addEventListener('click', (e) => { if (e.target.closest('button')) A.click(); }, true);
 
 // ダブルタップでの拡大を防ぐ
 let lastTouch = 0;

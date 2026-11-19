@@ -10,7 +10,14 @@ import { NET, online, onNet, cloudSave, cloudLoad, cloudInfo } from './net.js';
 import { stageOf } from './career.js';
 import { startRace } from './racescreen.js';
 import { pull, COST_1, COST_10, GACHA_POOL, RATES } from './gacha.js';
-import { setSound, initAudio } from './audio.js';
+import { setSound, initAudio, setVolumes, playBgm } from './audio.js';
+import { openGacha } from './gachaui.js';
+import { openOwner } from './ownerui.js';
+import { openHall, newHallCount } from './hallui.js';
+import { openOnline, syncRank } from './onlineui.js';
+import { missionHtml, mission } from './mission.js';
+import { bondN, applyBond, addBond, bondLv, BOND_NAME } from './combo.js';
+import { ownerState } from './owner.js';
 
 const app = () => document.getElementById('app');
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -59,19 +66,25 @@ export function home() {
     <div class="logo"><div class="logo-sub">競馬育成ゲーム</div><div class="logo-main">死ぬか<br>生きるかの<br>戦い</div></div>
     ${S.title ? `<div class="htitle">「${esc(S.title)}」</div>` : ''}
     <div class="carrot home-carrot">🥕 金のにんじん ${S.carrots}</div>
+    ${missionHtml(esc)}
     <div class="menu">
       <button class="mbtn big" data-act="horse">🐎 馬を育てる${ah && ah.p ? `<small>続き：${esc(ah.p.name)}（${ah.p.age}歳${ah.p.month}月）</small>` : '<small>生まれてから引退まで</small>'}</button>
       <button class="mbtn" data-act="jockey">🏇 騎手を育てる${aj && aj.p ? `<small>続き：${esc(aj.p.name)}（${aj.p.age}歳）</small>` : '<small>競馬学校から引退まで</small>'}</button>
       <button class="mbtn" data-act="bet">🎫 競馬で賭ける<small>コインで馬券を買う・ルームで友達と勝負　🪙 ${(S.bet ? S.bet.coins : 10000).toLocaleString('ja-JP')}</small></button>
+      <button class="mbtn" data-act="owner">🏠 馬主モード<small>${S.owner ? `資金 ${Math.round(S.owner.money).toLocaleString('ja-JP')}万円・${S.owner.horses.length}頭` : 'セリで馬を買って、厩舎で走らせる'}</small></button>
       <button class="mbtn" data-act="list">📖 一覧<small>育てた馬 ${S.horses.length}頭・騎手 ${S.jockeys.length}人</small></button>
       <button class="mbtn" data-act="ach">🏆 実績と称号<small>${Object.keys(S.ach || {}).length}/${ACH.length} 達成</small></button>
-      <button class="mbtn" data-act="gacha">🎰 ガチャ<small>キャラは準備中</small></button>
-      <button class="mbtn" data-act="vs">⚔️ 対戦・レース<small>育てた馬で勝負</small></button>
+      <button class="mbtn" data-act="hall">🏛 殿堂<small>${(() => { const n = newHallCount(); return n ? `🆕 新しい殿堂入り ${n}` : '名馬・名騎手の記念館'; })()}</small></button>
+      <button class="mbtn" data-act="gacha">🎰 ガチャ<small>育成を助けるサポートキャラ　所持 ${new Set(S.gacha).size}人</small></button>
+      <button class="mbtn" data-act="vs">⚔️ 対戦・レース<small>育てた馬と騎手のコンビで勝負</small></button>
+      <button class="mbtn" data-act="online">🌐 オンライン<small>友達とリアルタイム対戦・全国ランキング</small></button>
       <button class="mbtn small" data-act="settings">⚙️ 設定</button>
     </div>
   </div>`);
   bind({ horse: () => openCareer('horse', home), jockey: () => openCareer('jockey', home),
-    list: () => listScreen('h'), bet: () => openBet(home), ach: achScreen, gacha: gachaScreen, vs: vsScreen, settings: settingsScreen });
+    list: () => listScreen('h'), bet: () => openBet(home), ach: achScreen, gacha: () => openGacha(home), vs: vsScreen, settings: settingsScreen,
+    owner: () => openOwner(home), hall: () => openHall(home), online: () => openOnline(home) });
+  playBgm('menu'); syncRank();
 }
 GO.home = home;
 
@@ -168,7 +181,7 @@ function gachaScreen() {
 function vsScreen() {
   const mine = [];
   const ap = S.activeHorse && S.activeHorse.p;
-  if (ap && stageOf(ap) === 'tc') mine.push({ h: { name: ap.name, s: ap.st, apt: ap.apt, style: ap.style, coat: ap.coat, skills: ap.skills }, label: '育成中' });
+  if (ap && stageOf(ap) === 'tc') mine.push({ h: { id: ap.id, name: ap.name, s: ap.st, apt: ap.apt, style: ap.style, coat: ap.coat, skills: ap.skills }, label: '育成中' });
   for (const h of S.horses) mine.push({ h, label: '引退馬' });
   let sel = 0, jsel = -1, rsel = 0;
   const friends = [];
@@ -181,7 +194,8 @@ function vsScreen() {
       <div class="sec">自分の馬</div>
       <div class="plist">${mine.map((x, i) => `<button class="pitem ${i === sel ? 'on' : ''}" data-act="sel" data-v="${i}"><b>${esc(x.h.name)}</b><small>${x.label}　${H_KEYS.map(k => rankOf(x.h.s[k])).join('')}</small></button>`).join('')}</div>
       <div class="sec">騎手</div>
-      <div class="chips"><button class="chip ${jsel === -1 ? 'on' : ''}" data-act="js" data-v="-1">${NPC_JOCKEY.name}</button>${S.jockeys.map((j, i) => `<button class="chip ${jsel === i ? 'on' : ''}" data-act="js" data-v="${i}">${esc(j.name)}</button>`).join('')}</div>
+      <div class="chips"><button class="chip ${jsel === -1 ? 'on' : ''}" data-act="js" data-v="-1">${NPC_JOCKEY.name}</button>${S.jockeys.map((j, i) => { const hh = mine[sel] && mine[sel].h; const bl = hh && hh.id != null ? bondLv(bondN(hh.id, j.id)) : 0; return `<button class="chip ${jsel === i ? 'on' : ''}" data-act="js" data-v="${i}">${esc(j.name)}${bl ? `<small>🤝${BOND_NAME[bl]}</small>` : ''}</button>`; }).join('')}</div>
+      <p class="note">自分で育てた馬と騎手で走るほど「コンビの絆」が深まり、能力にボーナスがつく。</p>
       <div class="sec">レース</div>
       <select id="rsel">${presets.map((r, i) => `<option value="${i}" ${i === rsel ? 'selected' : ''}>${r.g ? r.g + ' ' : ''}${r.name}（${r.surf}${r.dist}m）</option>`).join('')}</select>
       ${rsel === 0 ? `<div class="row2"><select id="fsurf"><option ${presets[0].surf === '芝' ? 'selected' : ''}>芝</option><option ${presets[0].surf === 'ダ' ? 'selected' : ''}>ダ</option></select>
@@ -208,11 +222,14 @@ function vsScreen() {
         const r = { ...presets[rsel] };
         const avg = H_KEYS.reduce((a, k) => a + h.s[k], 0) / 5;
         r.lv = r.g === 'G1' ? 80 : avg; r.prize = 0;
+        const opps0 = null;
         const opps = friends.map((f, i) => ({ name: f.n, jname: f.jn, h: { ...f.s }, j: { ...f.js }, apt: r.surf === '芝' ? f.a.turf : f.a.dirt, cond: 2, style: f.st, coat: f.c, silk: SILKS[f.sl ?? i], hsk: f.k || [] }));
         startRace({ race: r, fieldSize: r.g ? 14 : 12, opponents: opps,
-          player: { name: h.name, jname: j.name, h: { ...h.s }, j: { ...j.s }, apt: r.surf === '芝' ? h.apt.turf : h.apt.dirt, cond: 2, style: h.style, coat: h.coat, silk: j.silk ?? 6, hsk: h.skills || [], jsk: j.skills || [] },
+          player: applyBond({ name: h.name, jname: j.name, h: { ...h.s }, j: { ...j.s }, apt: r.surf === '芝' ? h.apt.turf : h.apt.dirt, cond: 2, style: h.style, coat: h.coat, silk: j.silk ?? 6, hsk: h.skills || [], jsk: j.skills || [] }, h.id != null && j.id != null ? bondN(h.id, j.id) : 0),
           onDone: (res) => {
-            if (res && res.pos === 1) { S.carrots += 5; save(); toast('勝利！ 🥕+5'); }
+            mission('vs'); mission('race3d');
+            if (res && h.id != null && j.id != null) addBond(h.id, j.id);
+            if (res && res.pos === 1 && !res.dnf) { S.carrots += 5; save(); toast('勝利！ 🥕+5'); mission('win'); }
             draw();
           } });
       } });
@@ -237,7 +254,11 @@ function achScreen() {
 function settingsScreen() {
   render(`${header('設定')}
   <div class="page">
-    <div class="card"><label class="sw-row"><span>効果音</span><input type="checkbox" id="snd" ${S.settings.sound ? 'checked' : ''}></label>
+    <div class="card"><label class="sw-row"><span>音を出す（ぜんぶ）</span><input type="checkbox" id="snd" ${S.settings.sound ? 'checked' : ''}></label>
+    <label class="sw-row"><span>🎵 BGM</span><input type="range" id="v-bgm" min="0" max="100" value="${Math.round(((S.settings.vol || {}).bgm ?? 0.5) * 100)}"></label>
+    <label class="sw-row"><span>🔔 効果音</span><input type="range" id="v-sfx" min="0" max="100" value="${Math.round(((S.settings.vol || {}).sfx ?? 0.8) * 100)}"></label>
+    <label class="sw-row"><span>📣 歓声</span><input type="range" id="v-crowd" min="0" max="100" value="${Math.round(((S.settings.vol || {}).crowd ?? 0.7) * 100)}"></label>
+    <label class="sw-row"><span>レース前のパドック・ファンファーレ</span><input type="checkbox" id="prerace" ${S.settings.prerace !== false ? 'checked' : ''}></label>
     <label class="sw-row"><span>カットシーン</span><input type="checkbox" id="cuts" ${S.settings.cuts !== false ? 'checked' : ''}></label>
     <label class="sw-row"><span>レースの視点（最初）</span><select id="vw"><option value="fp" ${S.settings.view === 'fp' ? 'selected' : ''}>騎手視点</option><option value="back" ${S.settings.view === 'back' ? 'selected' : ''}>後ろから</option><option value="tv" ${S.settings.view === 'tv' ? 'selected' : ''}>中継</option></select></label></div>
     <div class="card"><b>遊び方</b><p class="small">馬は0歳から育てて、2歳6月からレースに出られます。7歳の年末か、重い故障で引退。疲れたまま調教するとケガをしやすく、重い故障だと競走生命の危機に。<br>レースは騎手視点。◀▶で進路を変え、ムチで加速。体力ゲージの使い方が勝負の分かれ目です。</p></div>
@@ -246,6 +267,9 @@ function settingsScreen() {
     <p class="muted small center">データはこの端末のブラウザに保存されています</p>
   </div>`);
   document.getElementById('snd').onchange = (e) => { S.settings.sound = e.target.checked; setSound(S.settings.sound); save(); };
+  for (const k of ['bgm', 'sfx', 'crowd']) document.getElementById('v-' + k).oninput = (e) => { S.settings.vol = { bgm: 0.5, sfx: 0.8, crowd: 0.7, ...(S.settings.vol || {}), [k]: +e.target.value / 100 }; initAudio(); setVolumes(S.settings.vol); save(); };
+  document.getElementById('prerace').onchange = (e) => { S.settings.prerace = e.target.checked; save(); };
+  document.getElementById('snd').addEventListener('change', () => { if (S.settings.sound) { initAudio(); playBgm('menu', true); } });
   document.getElementById('cuts').onchange = (e) => { S.settings.cuts = e.target.checked; save(); };
   document.getElementById('vw').onchange = (e) => { S.settings.view = e.target.value; save(); };
   bind({ go, reset: () => { if (confirm('育てた馬・騎手・ガチャをすべて消します。よろしいですか？')) { resetAll(); home(); } } });

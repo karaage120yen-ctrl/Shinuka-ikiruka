@@ -20,6 +20,22 @@ service cloud.firestore {
       }
     }
 
+    // オンライン対戦の部屋
+    match /kb_vs/{code} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.resource.data.size() < 20;
+      match /members/{uid} {
+        allow read: if request.auth != null;
+        allow write: if request.auth != null && request.auth.uid == uid;
+      }
+    }
+    // 全国ランキング：自分の行だけ書ける
+    match /kb_rank/{uid} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == uid
+                   && request.resource.data.size() < 20;
+    }
+
     // ===== サッカーやるよん =====
     match /data/users/{uid}/{docId} {
       allow read, write: if request.auth != null && request.auth.uid == uid;

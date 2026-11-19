@@ -192,7 +192,8 @@ export function stepRace(race, dt, input) {
   const rs = race.racers;
   const pl = race.player;
   // 順位
-  const sorted = [...rs].sort((a, b) => (b.finished ? 1e6 - b.finishTime * 100 : b.p) - (a.finished ? 1e6 - a.finishTime * 100 : a.p));
+  const key = (r) => (r.fallen ? -1e7 + r.p : r.finished ? 1e6 - r.finishTime * 100 : r.p);
+  const sorted = [...rs].sort((a, b) => key(b) - key(a));
   sorted.forEach((r, i) => { r.rank = i + 1; });
   const leaderP = sorted[0].p;
 
@@ -242,6 +243,9 @@ export function stepRace(race, dt, input) {
       whipping = false;
     } else if (ratio < 0.15) target *= 0.9 + ratio / 0.15 * 0.08 + 0.0003 * r.h.gut;
     if (rem < r.spurtDist) target *= r.sue;
+    // つまずき・落馬（カラ馬はゆっくり走り続ける）
+    if (r.stumbleT > 0) { r.stumbleT -= dt; target = Math.min(target, r.top * 0.8); }
+    if (r.fallen) { target = Math.min(r.top * 0.82, r.top * 0.82); whipping = false; }
     // 坂（上りは遅くなる。パワーがあると楽）
     if (HILL.length) { const g = grade(r.u); target *= g > 0 ? 1 - g * 3 * (1 - r.h.pow / 200) : 1 - g * 1.2; r.slope = g; } else r.slope = 0;
     target = Math.min(target, r.top * 1.07);
@@ -296,7 +300,7 @@ export function stepRace(race, dt, input) {
       if (ad < 1.05) {
         const push = (1.05 - ad) / 2, sgn = dd >= 0 ? 1 : -1;
         a.d -= push * sgn; b.d += push * sgn;
-        for (const q of [a, b]) { if (q.bump <= 0 && q.isPlayer) race.events.push({ type: 'bump' }); q.bump = 0.25; }
+        for (const q of [a, b]) { if (q.bump <= 0 && q.isPlayer) race.events.push({ type: 'bump' }); if (q.bump <= 0 && q.v > 15 && !q.finished && SR() < (q.isPlayer && !q.ai ? 0.012 : 0.002)) stumble(q, race); q.bump = 0.25; }
       }
     }
   }
@@ -311,8 +315,24 @@ export function stepRace(race, dt, input) {
 }
 
 function doWhip(r, race) {
+  if (r.fallen) return;
   r.whipT = 0.95; r.whipCool = r.whipCd; r.whips++;
   if (r.isPlayer) race.events.push({ type: 'whip' });
+  // スタミナが切れているのに追いすぎると、つまずく・落馬する
+  const ratio = r.energy / r.cap;
+  const risk = ratio <= 0 ? 0.09 : ratio < 0.05 ? 0.025 : 0;
+  if (risk && !r.finished && SR() < risk) stumble(r, race);
+}
+function stumble(r, race) {
+  if (r.fallen) return;
+  const again = r.stumbleT > 0 || r.energy <= 0;
+  if (again && SR() < (r.energy <= 0 ? 0.4 : 0.2)) {
+    r.fallen = true; r.dnf = true; r.v *= 0.6; r.whipT = 0; r.ai = true; r.laneWant = TRACK.width - 2;
+    race.events.push({ type: 'fall', r });
+    return;
+  }
+  r.stumbleT = 1.1; r.v *= 0.74;
+  race.events.push({ type: 'stumble', r });
 }
 
 export function aiLane(r, race, rem) {
@@ -365,10 +385,10 @@ export function simulateRace(cfg) {
   race.countdown = 0; race.started = true;
   let t = 0;
   while (race.finishedCount < race.racers.length && t < 400) { stepRace(race, 1 / 20, null); t += 1 / 20; race.events.length = 0; }
-  const all = race.racers.map(r => ({ r, time: r.finished ? r.finishTime : race.t + (race.dist - r.p) / Math.max(10, r.v) })).sort((a, b) => a.time - b.time);
-  const list = all.map((x, i) => ({ pos: i + 1, name: x.r.name, jname: x.r.jname, num: x.r.num, time: x.time, isPlayer: !!x.r.isPlayer, margin: i === 0 ? '' : marginText(x.time - all[i - 1].time, 16.5), silk: x.r.silk }));
+  const all = race.racers.map(r => ({ r, time: (r.fallen ? 1e4 : 0) + (r.finished ? r.finishTime : race.t + (race.dist - r.p) / Math.max(10, r.v)) })).sort((a, b) => a.time - b.time);
+  const list = all.map((x, i) => ({ pos: i + 1, name: x.r.name, jname: x.r.jname, num: x.r.num, time: x.time % 1e4, dnf: !!x.r.fallen, isPlayer: !!x.r.isPlayer, margin: x.r.fallen ? '中止' : i === 0 ? '' : marginText(x.time - all[i - 1].time, 16.5), silk: x.r.silk }));
   const me = list.find(x => x.isPlayer);
-  return { pos: me.pos, field: list.length, time: me.time, whips: race.player.whips, list, jname: cfg.player.jname, auto: true };
+  return { pos: me.pos, field: list.length, time: me.time, whips: race.player.whips, list, jname: cfg.player.jname, auto: true, dnf: me.dnf };
 }
 
 // 出走馬を全部指定して結果だけ出す（賭け用）
@@ -383,6 +403,6 @@ export function simulateField(specs, race, seed, dt = 1 / 60) {
   return fieldResult(R);
 }
 export function fieldResult(R) {
-  const all = R.racers.map(r => ({ r, time: r.finished ? r.finishTime : R.t + (R.dist - r.p) / Math.max(10, r.v) })).sort((a, b) => a.time - b.time);
-  return all.map((x, i) => ({ pos: i + 1, num: x.r.num, name: x.r.name, jname: x.r.jname, time: x.time, margin: i === 0 ? '' : marginText(x.time - all[i - 1].time, 16.5) }));
+  const all = R.racers.map(r => ({ r, time: (r.fallen ? 1e4 : 0) + (r.finished ? r.finishTime : R.t + (R.dist - r.p) / Math.max(10, r.v)) })).sort((a, b) => a.time - b.time);
+  return all.map((x, i) => ({ pos: i + 1, num: x.r.num, name: x.r.name, jname: x.r.jname, time: x.time % 1e4, dnf: !!x.r.fallen, margin: x.r.fallen ? '中止' : i === 0 ? '' : marginText(x.time - all[i - 1].time, 16.5) }));
 }

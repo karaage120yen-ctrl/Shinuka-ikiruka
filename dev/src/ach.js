@@ -50,7 +50,7 @@ function unlock(id) {
   const msg = `🏆 実績「${a.n}」${a.r.carrots ? `　🥕+${a.r.carrots}` : ''}${a.r.coins ? `　🪙+${a.r.coins.toLocaleString('ja-JP')}` : ''}`;
   if (toastFn) toastFn(msg); else showToast(msg);
 }
-function showToast(t) {
+export function showToast(t) {
   const el = document.createElement('div'); el.className = 'toast ach'; el.textContent = t;
   document.body.appendChild(el); setTimeout(() => el.classList.add('show'), 10);
   setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 400); }, 3200);

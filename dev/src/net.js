@@ -70,3 +70,38 @@ export function callWatch(k, no) {
   return NET.api.db.doc(`kb_rooms/${curRoom}`).set({ watch: w, t: Date.now() }, true);
 }
 export const me = () => NET.user && NET.user.uid;
+
+// ----- オンライン対戦（同じ部屋の馬で一斉に走る） -----
+let unsubVM = null, unsubVR = null, vsCode = '';
+export const VS = { members: [], room: null };
+export function vsJoin(code, me) {
+  if (!online()) return Promise.reject(new Error('オフライン'));
+  vsListen(code);
+  return NET.api.db.doc(`kb_vs/${code}/members/${NET.user.uid}`).set({ n: me.n, spec: JSON.stringify(me.spec), t: Date.now() });
+}
+export function vsListen(code) {
+  if (vsCode === code) return;
+  if (unsubVM) unsubVM(); if (unsubVR) unsubVR(); VS.members = []; VS.room = null; vsCode = code || '';
+  if (!code || !online()) { emit(); return; }
+  unsubVM = NET.api.db.col(`kb_vs/${code}/members`).onSnapshot((l) => { VS.members = l.filter(x => Date.now() - (x.t || 0) < 6 * 3600e3); emit(); }, (e) => console.warn(e));
+  unsubVR = NET.api.db.doc(`kb_vs/${code}`).onSnapshot((d) => { VS.room = d.exists ? d.data() : null; emit(); }, (e) => console.warn(e));
+}
+export function vsLeave() { if (online() && vsCode) NET.api.db.doc(`kb_vs/${vsCode}/members/${NET.user.uid}`).delete().catch(() => {}); vsListen(''); }
+export function vsStart(code, race) {
+  return NET.api.db.doc(`kb_vs/${code}`).set({ start: { at: Date.now() + 10000, seed: Math.floor(Math.random() * 1e9), race, by: NET.user.uid }, t: Date.now() }, true);
+}
+
+// ----- 全国ランキング -----
+let unsubRank = null;
+export const RANK = { list: [] };
+export function rankListen(on) {
+  if (unsubRank) { unsubRank(); unsubRank = null; }
+  if (!on || !online()) return;
+  unsubRank = NET.api.db.col('kb_rank').onSnapshot((l) => { RANK.list = l; emit(); }, (e) => console.warn(e));
+}
+let rankT = null;
+export function pushRank(d) {
+  if (!online()) return;
+  clearTimeout(rankT);
+  rankT = setTimeout(() => NET.api.db.doc(`kb_rank/${NET.user.uid}`).set({ ...d, t: Date.now() }).catch(e => console.warn(e)), 3000);
+}

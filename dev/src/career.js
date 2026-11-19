@@ -297,6 +297,7 @@ export function prOf(ch, c) {
   let v = ch.pr(c); if (v >= 1) return 1;
   if (c.p.subs && c.p.subs.mental) v += 0.05;
   if (has(c.p, 'g1man')) v += 0.05;
+  v += supv(c.p, 'ev');
   return clamp(v, 0.05, 0.95);
 }
 const JIT = ['hp', 'spd', 'sta', 'pow', 'gut', 'wis', 'tec', 'whip', 'bal', 'fit', 'jud', 'key', 'all', 'pop', 'eval', 'cond', 'money', 'love', 'fam'];
@@ -372,7 +373,9 @@ export function bigRacesInTurn(p) {
 export const condIdx = (p) => { let i = p.cond < 20 ? 0 : p.cond < 40 ? 1 : p.cond < 70 ? 2 : p.cond < 90 ? 3 : 4; if (p.sta < 30) i = Math.max(0, i - 1); return i; };
 
 // ===== 1か月の計算 =====
-function injMult(p) {
+function injMult(p) { return injMult0(p) * (1 - supv(p, 'inj')); }
+export const supv = (p, k) => (p.sup && p.sup[k]) || 0;
+function injMult0(p) {
   if (p.kind === 'horse') return (1.35 - Math.min(p.st.pow, 100) / 150) * (p.age >= 6 ? 1.35 : 1) * (p.subs.farrier ? 0.7 : 1) * (has(p, 'iron') ? 0.6 : 1) * (p.sta < 30 ? 1.6 : 1);
   return (1.35 - Math.min(p.st.fit, 100) / 150) * (p.age >= 40 ? 1.35 : 1) * (p.subs.nutri ? 0.7 : 1) * (has(p, 'ironj') ? 0.6 : 1) * (p.sta < 30 ? 1.6 : 1);
 }
@@ -388,8 +391,9 @@ function grow(p, mult, a) {
     let d = g > 0 ? g * Math.max(0, p.cap[k] - p.st[k]) * K.rate * sb * ip * sp * mult + (below ? rnd(-0.12, 0.18) : rnd(-0.1, 0.04))
       : g * DECAY[k] / 12 + rnd(-0.15, 0.08);
     if (below) {
-      if (p.focus === k) d += t.g / 12 * mult * (g > 0 ? sb : 1) * ip;
-      else if (p.focus === 'all') d += t.g / 12 * 0.33 * mult * ip;
+      const sup = 1 + ((p.sup && p.sup.train && p.sup.train[k]) || 0);
+      if (p.focus === k) d += t.g / 12 * mult * (g > 0 ? sb : 1) * ip * sup;
+      else if (p.focus === 'all') d += t.g / 12 * 0.33 * mult * ip * sup;
       if (a.boost && a.boost.includes(k)) d += 0.3 * ip;
       if (d > 0) d = Math.min(d, p.cap[k] - p.st[k] + 0.05);
     }
@@ -425,7 +429,7 @@ function jockeyRides(p, a, res, m) {
   const pw = clamp(0.015 + Math.max(0, o - 40) * 0.0025 + (p.eval - 50) * 0.0005 + (rep - 50) * 0.0006 + (p.cond - 60) * 0.0002, 0.01, 0.2);
   let w = 0, s2 = 0, s3 = 0;
   for (let i = 0; i < rides; i++) { const x = Math.random(); if (x < pw) w++; else if (x < pw * 1.85) s2++; else if (x < pw * 2.6) s3++; }
-  const inc = Math.round(rides * 2.6 + w * 45 + s2 * 18 + s3 * 11);
+  const inc = Math.round((rides * 2.6 + w * 45 + s2 * 18 + s3 * 11) * (1 + supv(p, 'money')));
   p.rides += rides; p.wins += w; p.record[0] += w; p.record[1] += s2; p.record[2] += s3; p.record[3] += rides - w - s2 - s3;
   p.money += inc; p.earnings += inc;
   res.rides += rides; res.w += w; res.inc += inc;
@@ -466,9 +470,20 @@ function fateRoll(p, res) {
 export function applyHorseRace(p, race, rr, res) {
   const pos = rr.pos;
   if (race.cost) { p.money -= race.cost; res.cost += race.cost; res.notes.push(`${race.abroad}への遠征費 ${yen(race.cost)}`); }
-  p.races.push({ y: p.year, age: p.age, m: race.m, name: race.name, g: race.g, surf: race.surf, dist: race.dist, pos, field: rr.field, time: rr.time, jockey: rr.jname || '', abroad: race.abroad || null, going: race.going, weather: race.weather });
+  p.races.push({ y: p.year, age: p.age, m: race.m, name: race.name, g: race.g, surf: race.surf, dist: race.dist, pos, field: rr.field, time: rr.time, jockey: rr.jname || '', abroad: race.abroad || null, going: race.going, weather: race.weather, dnf: rr.dnf || undefined });
+  if (rr.dnf) {
+    // 落馬・競走中止：死ぬか生きるか
+    p.record[3]++; p.cond = clamp(p.cond - 15, 0, 100); p.eval = clamp(p.eval - 4, 0, 100);
+    res.races.push({ ...race, pos, field: rr.field, time: rr.time, prize: 0, dnf: true });
+    res.notes.push(`${race.name}で騎手が落馬し、競走中止`);
+    const r2 = Math.random();
+    if (r2 < 0.05) { p.fate = { ty: 'death', why: `${race.name}で転倒。脚の骨折は重く、予後不良と診断された`, head: '訃報' }; res.fate = p.fate; }
+    else if (r2 < 0.5) { const w = Math.random() < 0.35 ? ri(12, 24) : ri(2, 8); p.inj += w; p.injName = pick(INJ_H[w >= 12 ? 1 : 0][2]); res.notes.push(`転倒のケガで${p.injName}（全治${w}週間）`); if (w >= 12) p.flags.surgery = p.injName; }
+    p.sta = clamp(p.sta - 25, 0, 100);
+    return;
+  }
   p.record[Math.min(pos, 4) - 1]++;
-  let prize = pos <= 5 ? race.prize * [1, 0.4, 0.25, 0.15, 0.1][pos - 1] : 0;
+  let prize = pos <= 5 && !rr.dnf ? race.prize * [1, 0.4, 0.25, 0.15, 0.1][pos - 1] * (1 + supv(p, 'money')) : 0;
   p.money += prize * 0.8; p.earnings += prize; res.inc += prize * 0.8;
   if (pos === 1) {
     p.wins++; if (race.g) { p.gradedWins++; p.titles.push(race.name); } if (race.g === 'G1') p.g1Wins++;
@@ -503,7 +518,15 @@ export function applyJockeyRace(p, race, rr, res) {
     return;
   }
   p.rides++; p.record[Math.min(pos, 4) - 1]++;
-  const prize = pos <= 5 ? race.prize * [1, 0.4, 0.25, 0.15, 0.1][pos - 1] * 0.05 : 0;
+  if (rr.dnf) {
+    res.races.push({ ...race, pos, field: rr.field, time: rr.time, prize: 0, dnf: true });
+    p.eval = clamp(p.eval - 3, 0, 100);
+    const r2 = Math.random();
+    if (r2 < 0.6) { const sev = r2 < 0.1; const w = sev ? ri(12, 24) : ri(2, 8); p.inj += w; p.injName = pick(INJ_J[sev ? 1 : 0][2]); res.notes.push(`${race.name}で落馬。${p.injName}（全治${w}週間）`); }
+    else res.notes.push(`${race.name}で落馬したが、ケガはなかった`);
+    return;
+  }
+  const prize = pos <= 5 ? race.prize * [1, 0.4, 0.25, 0.15, 0.1][pos - 1] * 0.05 * (1 + supv(p, 'money')) : 0;
   p.money += prize; p.earnings += prize; res.inc += prize;
   if (pos === 1) {
     p.wins++; p.gradedWins++; if (race.g === 'G1') p.g1Wins++;
@@ -545,10 +568,11 @@ function monthStep(C, a, res, first, m) {
   grow(p, a.g * (p.kind === 'jockey' && p.stage === 'pro' && !a.norides ? 1.1 : 1), a);
   // 体力・調子・お金
   const homeB = p.kind === 'jockey' ? ({ apart: 1, tower: 3, house: 3 }[p.home] || 0) + (p.car === 'compact' ? 1 : 0) : (p.items.stall ? 2 : 0);
-  p.sta = clamp(p.sta + 12 + (p.subs.nutri ? 3 : 0) + ((p.items.capsule || p.items.capsuleH) ? 5 : 0) + homeB, 0, 100);
+  p.sta = clamp(p.sta + 12 + supv(p, 'sta') + (p.subs.nutri ? 3 : 0) + ((p.items.capsule || p.items.capsuleH) ? 5 : 0) + homeB, 0, 100);
   let dc = (p.subs.mental || p.items.stall ? rnd(-3, 3) : rnd(-5, 5)) + (60 - p.cond) * 0.1;
   if (p.kind === 'jockey') { const P = p.fam.partner; if (P && P.married) dc += (p.fam.happy - 50) / 20; else if (P) dc += (P.love - 50) / 30; }
   if (p.money < 0) dc -= 5;
+  dc += supv(p, 'cond');
   p.cond = clamp(p.cond + dc, 0, 100);
   if (p.kind === 'jockey') {
     const P = p.fam.partner;
@@ -568,7 +592,7 @@ export function newCareerState(p) {
 }
 function freshYear(p) { return { y: p.year, age: p.age, st0: { ...p.st }, o0: ovrOf(p), rec0: [...p.record], rides0: p.rides || 0, wins0: p.wins, earn0: p.earnings, titles0: p.titles.length, races0: (p.races || []).length, g10: p.g1Wins }; }
 
-export function startTurn(C) { C.act = null; C.evq = []; C.evi = 0; C.evr = null; C.mres = null; C.raceSel = null; C.raceRes = null; C.screen = 'month'; }
+export function startTurn(C) { C.rivalNote = null; C.act = null; C.evq = []; C.evi = 0; C.evr = null; C.mres = null; C.raceSel = null; C.raceRes = null; C.screen = 'month'; }
 
 export function confirmAction(C) {
   const p = C.p; const q = [];
@@ -737,6 +761,23 @@ function newYear(C) {
   C.yr = freshYear(p);
   C.screen = 'camp';
 }
+
+// ===== 馬主モード：1か月ぶんの調教 =====
+export function ownerMonth(p, plan, m, res) {
+  p.month = m;
+  p.int = plan === 'hard' ? 'hard' : plan === 'rest' ? 'easy' : 'std'; p.focus = 'all';
+  const a = { id: 'own', g: plan === 'hard' ? 1.45 : plan === 'rest' ? 0.4 : 1.15 };
+  if (plan !== 'rest' && stageOf(p) === 'tc' && Math.random() < TRAIN[p.int].inj / 9 * injMult(p)) {
+    const sev = Math.random() < 0.15, w = sev ? ri(12, 24) : ri(2, 8);
+    p.inj += w; p.injName = pick(INJ_H[sev ? 1 : 0][2]); res.notes.push(`${p.name}：調教中に${p.injName}（全治${w}週間）`);
+  }
+  grow(p, a.g, a);
+  p.sta = clamp(p.sta + 12 + (plan === 'rest' ? 18 : 0) - (plan === 'hard' ? 7 : 0), 0, 100);
+  p.cond = clamp(p.cond + rnd(-6, 6) + (60 - p.cond) * 0.1 + (plan === 'rest' ? 4 : 0), 0, 100);
+  p.inj = Math.max(0, p.inj - 4.3); if (p.inj <= 0) p.injName = '';
+  checkSkills(p);
+}
+export function ownerRaces(p, m) { p.month = m; return racesInTurn(p).filter(r => r.m === m && !r.locked); }
 
 // ===== 引退 =====
 export function scoreOf(p) {
