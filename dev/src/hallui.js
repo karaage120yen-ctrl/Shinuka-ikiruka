@@ -1,3 +1,4 @@
+import { horseFace } from './portrait.js';
 // ===== 殿堂（名馬・名騎手の記念館） =====
 import { S, save } from './store.js';
 import { render, bind, header, esc, hex } from './uikit.js';
@@ -15,7 +16,7 @@ export function openHall(home) { back = home; draw(); }
 function plaque(c, kind) {
   const keys = kind === 'h' ? H_KEYS : J_KEYS, names = kind === 'h' ? H_NAMES : J_NAMES;
   const titles = (c.titles || []).slice(0, 8);
-  return `<div class="plaque ${kind}"><div class="pl-h">${kind === 'h' ? `<span class="face" style="--c:${hex(COAT[c.coat] ? COAT[c.coat].body : 0x8b5a2b)}">🐴</span>` : '<span class="face">🏇</span>'}
+  return `<div class="plaque ${kind}"><div class="pl-h">${kind === 'h' ? horseFace(c.coat, c.name) : '<span class="face">🏇</span>'}
     <div><b>${esc(c.name)}</b><small>${kind === 'h' ? `${c.sex || ''} 父${esc(c.sire || '')}` : ''}　総合評価 <b style="color:${rankColor(c.rank)}">${c.rank}</b></small></div></div>
     <div class="pl-r">${kind === 'h' ? `${(c.record || []).slice(0, 3).join('-')}-${c.record ? c.record[3] : 0}　${c.wins}勝（G1 ${c.g1Wins}勝）　獲得 ${Math.round(c.earnings || 0).toLocaleString('ja-JP')}万円` : `${c.wins}勝（G1 ${c.g1Wins}勝）　${c.rides || 0}騎乗`}</div>
     <div class="pl-s">${keys.map(k => { const r = rankOf(c.s[k]); return `<span>${names[k]}<b style="color:${rankColor(r)}">${r}</b></span>`; }).join('')}</div>

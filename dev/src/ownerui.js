@@ -1,3 +1,4 @@
+import { horseFace } from './portrait.js';
 // ===== 馬主モード（画面） =====
 import { S, save } from './store.js';
 import { render, bind, toast, header, modal, esc, hex, man } from './uikit.js';
@@ -25,7 +26,7 @@ function draw() {
   } else if (tab === 'sale') {
     const L = O2.lots(O);
     body = `<p class="note">月が変わると新しい馬が出てくる。「見栄え」は目安で、本当の素質はわからない。ライバル馬主と競り合って落札しよう。（厩舎は${O2.MAX_HORSES}頭まで）</p>` +
-      L.map((l, i) => `<div class="lot ${l.sold ? 'sold' : ''}"><div class="lot-h"><b>${esc(l.p.name)}</b><span>${l.p.sex}・${l.p.age}歳・${COAT[l.p.coat].name}</span></div>
+      L.map((l, i) => `<div class="lot ${l.sold ? 'sold' : ''}"><div class="lot-h">${horseFace(l.p.coat, l.p.name, 'sm')}<b>${esc(l.p.name)}</b><span>${l.p.sex}・${l.p.age}歳・${COAT[l.p.coat].name}</span></div>
         <div class="lot-b"><span>父 ${esc(l.p.sire)}　母 ${esc(l.p.dam)}</span><span>見栄え <b class="gold">${l.look}</b>　脚質 ${l.p.style}　芝${l.p.apt.turf}・ダ${l.p.apt.dirt}</span><span>今の能力 ${ranks(l.p)}</span></div>
         ${l.sold ? '<div class="lot-s">落札済み</div>' : `<button class="btn race" data-act="auc" data-v="${i}">セリに参加（開始 ${man(l.start)}）</button>`}</div>`).join('');
   } else {
@@ -47,7 +48,7 @@ function horseCard(O, H, i) {
   const p = H.p, st = K.stageOf(p), rs = O2.racesFor(H, O), jk = O2.jockeyOf(H.jockey);
   const bl = jk.id != null ? bondLv(bondN(p.id, jk.id)) : -1;
   const ei = H.entry ? rs.findIndex(r => r.name === H.entry.name && r.dist === H.entry.dist) : -1;
-  return `<div class="ohorse"><div class="oh-h"><span class="face" style="--c:${hex(COAT[p.coat].body)}">🐴</span><div><b>${esc(p.name)}</b><small>${p.sex}・${p.age}歳・${K.STAGE_NAME[st]}・${p.wins}勝${p.g1Wins ? `（G1 ${p.g1Wins}勝）` : ''}</small></div><button class="x" data-act="ret" data-v="${i}">引退</button></div>
+  return `<div class="ohorse"><div class="oh-h">${horseFace(p.coat, p.name)}<div><b>${esc(p.name)}</b><small>${p.sex}・${p.age}歳・${K.STAGE_NAME[st]}・${p.wins}勝${p.g1Wins ? `（G1 ${p.g1Wins}勝）` : ''}</small></div><button class="x" data-act="ret" data-v="${i}">引退</button></div>
     <div class="oh-s">${ranks(p)}<span class="small">総合 ${K.ovrOf(p)}</span></div>
     <div class="oh-g"><span>体力</span>${bar(p.sta, '#3ddc84')}<span>調子</span>${bar(p.cond, '#ffc93d')}</div>
     ${p.inj > 0 ? `<p class="bad small">ケガ：${esc(p.injName)}（あと${Math.ceil(p.inj)}週）</p>` : ''}

@@ -124,15 +124,13 @@ export function tuftTex() {
 }
 // たてがみの毛すじ（白黒。色はマテリアルで付ける）
 export function maneTex() {
-  // 毛の束：根元（上）から毛先（下）へ。毛先はまばらに細くなる
-  const W = 256, H = 256, c = canvas(W, H), x = c.getContext('2d');
-  x.lineCap = 'round';
-  for (let i = 0; i < 900; i++) {
-    const px = 8 + Math.random() * (W - 16), l = H * (0.55 + Math.random() * 0.45), v = 120 + Math.random() * 135, sway = (Math.random() - 0.5) * 18;
-    x.strokeStyle = `rgba(${v},${v},${v},${0.75 + Math.random() * 0.25})`; x.lineWidth = 0.8 + Math.random() * 1.6;
-    x.beginPath(); x.moveTo(px, 0); x.bezierCurveTo(px + sway * 0.3, l * 0.35, px + sway * 0.8, l * 0.7, px + sway, l); x.stroke();
+  const c = canvas(256, 64), x = c.getContext('2d');
+  for (let i = 0; i < 520; i++) {
+    const px = Math.random() * 256, l = 30 + Math.random() * 34, v = 150 + Math.random() * 105;
+    x.strokeStyle = `rgb(${v},${v},${v})`; x.lineWidth = 0.8 + Math.random() * 1.4;
+    x.beginPath(); x.moveTo(px, 64); x.quadraticCurveTo(px + (Math.random() - 0.5) * 6, 64 - l * 0.5, px + (Math.random() - 0.5) * 10, 64 - l); x.stroke();
   }
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t;
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.generateMipmaps = false; t.minFilter = THREE.LinearFilter; return t;
 }
 // 砂ぼこり
 export function puffTex() {
@@ -233,44 +231,31 @@ export function clothTex(num, color) {
 // 毛並み（つや）
 // 毛並み：体の向き（u方向）に流れる短い毛をたくさん描く。色はマテリアル側で付ける
 const FUR = {};
-export function coatTex(dapple = false) {
-  const key = dapple ? 'd' : 'c';
-  if (!FUR[key]) {
+export function coatTex() {
+  if (!FUR.c) {
     const S = 512, c = canvas(S, S), x = c.getContext('2d');
-    // ごく細かい短い毛：明るさのムラは小さく、流れは横（u方向）にそろえる
-    x.fillStyle = '#ececec'; x.fillRect(0, 0, S, S);
-    for (let i = 0; i < 90; i++) { const v = 215 + Math.random() * 40; x.fillStyle = `rgba(${v},${v},${v},0.18)`; x.beginPath(); x.ellipse(Math.random() * S, Math.random() * S, 30 + Math.random() * 60, 10 + Math.random() * 18, (Math.random() - 0.5) * 0.3, 0, Math.PI * 2); x.fill(); }
-    if (dapple) {
-      // 連銭：少し濃い地の上に、ふんわり明るいまるい斑をならべる（すき間が網目に見える）
-      x.fillStyle = 'rgba(150,150,150,0.35)'; x.fillRect(0, 0, S, S);
-      for (let i = 0; i < 46; i++) {
-        const px = Math.random() * S, py = Math.random() * S, r = 30 + Math.random() * 22;
-        for (const [ox, oy] of [[0, 0], [S, 0], [-S, 0], [0, S], [0, -S], [S, S], [-S, -S], [S, -S], [-S, S]]) {
-          const g = x.createRadialGradient(px + ox, py + oy, 0, px + ox, py + oy, r);
-          g.addColorStop(0, 'rgba(255,255,255,0.55)'); g.addColorStop(0.6, 'rgba(255,255,255,0.4)'); g.addColorStop(1, 'rgba(255,255,255,0)');
-          x.fillStyle = g; x.beginPath(); x.arc(px + ox, py + oy, r, 0, Math.PI * 2); x.fill();
-        }
-      }
-    }
+    x.fillStyle = '#e9e9e9'; x.fillRect(0, 0, S, S);
+    // ゆるいムラ（毛の流れのかたまり）
+    for (let i = 0; i < 260; i++) { const v = 200 + Math.random() * 55; x.fillStyle = `rgba(${v},${v},${v},0.25)`; x.beginPath(); x.ellipse(Math.random() * S, Math.random() * S, 20 + Math.random() * 40, 6 + Math.random() * 12, (Math.random() - 0.5) * 0.4, 0, Math.PI * 2); x.fill(); }
+    // 毛（明るい毛と暗い毛）
     x.lineCap = 'round';
-    for (let i = 0; i < 70000; i++) {
-      const px = Math.random() * S, py = Math.random() * S, l = 3 + Math.random() * 6, a = (Math.random() - 0.5) * 0.25;
-      const v = Math.random() < 0.55 ? 255 : 175 + Math.random() * 40;
-      x.strokeStyle = `rgba(${v},${v},${v},${0.1 + Math.random() * 0.16})`; x.lineWidth = 0.5 + Math.random() * 0.6;
-      x.beginPath(); x.moveTo(px, py); x.lineTo(px + l, py + a * l); x.stroke();
+    for (let i = 0; i < 52000; i++) {
+      const px = Math.random() * S, py = Math.random() * S, l = 5 + Math.random() * 11, a = (Math.random() - 0.5) * 0.35;
+      const v = Math.random() < 0.5 ? 255 : 150 + Math.random() * 40;
+      x.strokeStyle = `rgba(${v},${v},${v},${0.18 + Math.random() * 0.22})`; x.lineWidth = 0.6 + Math.random() * 0.9;
+      x.beginPath(); x.moveTo(px, py); x.quadraticCurveTo(px + l * 0.5, py + a * l * 0.5 + 0.6, px + l, py + a * l); x.stroke();
     }
-    FUR[key] = c;
-    if (!FUR.b) {
-      const b = canvas(S, S), bx = b.getContext('2d'); bx.fillStyle = '#808080'; bx.fillRect(0, 0, S, S); bx.lineCap = 'round';
-      for (let i = 0; i < 60000; i++) {
-        const px = Math.random() * S, py = Math.random() * S, l = 3 + Math.random() * 5, v = Math.random() < 0.5 ? 175 : 85;
-        bx.strokeStyle = `rgba(${v},${v},${v},0.3)`; bx.lineWidth = 0.7; bx.beginPath(); bx.moveTo(px, py); bx.lineTo(px + l, py + (Math.random() - 0.5) * 1.2); bx.stroke();
-      }
-      FUR.b = b;
+    FUR.c = c;
+    // でこぼこ（毛の立体感）
+    const b = canvas(S, S), bx = b.getContext('2d'); bx.fillStyle = '#808080'; bx.fillRect(0, 0, S, S); bx.lineCap = 'round';
+    for (let i = 0; i < 40000; i++) {
+      const px = Math.random() * S, py = Math.random() * S, l = 4 + Math.random() * 9, v = Math.random() < 0.5 ? 200 : 60;
+      bx.strokeStyle = `rgba(${v},${v},${v},0.35)`; bx.lineWidth = 0.8; bx.beginPath(); bx.moveTo(px, py); bx.lineTo(px + l, py + (Math.random() - 0.5) * 2); bx.stroke();
     }
+    FUR.b = b;
   }
-  const t = tex(FUR[key], 5, 3); t.anisotropy = 8;
-  t.bump = new THREE.CanvasTexture(FUR.b); t.bump.wrapS = t.bump.wrapT = THREE.RepeatWrapping; t.bump.repeat.set(5, 3); t.bump.anisotropy = 8;
+  const t = tex(FUR.c, 5, 3); t.anisotropy = 4;
+  t.bump = new THREE.CanvasTexture(FUR.b); t.bump.wrapS = t.bump.wrapT = THREE.RepeatWrapping; t.bump.repeat.set(5, 3);
   return t;
 }
 // 黒いぼかし影
@@ -280,102 +265,4 @@ export function blobTex() {
   g.addColorStop(0, 'rgba(0,0,0,0.55)'); g.addColorStop(1, 'rgba(0,0,0,0)');
   x.fillStyle = g; x.fillRect(0, 0, 128, 128);
   const t = new THREE.CanvasTexture(c); return t;
-}
-// 目玉（白目・黒目・光）。球のu=0.5,v=0.5 が見る向き
-let EYE_T = null;
-export function eyeTex() {
-  if (EYE_T) return EYE_T;
-  const W = 512, H = 256, c = canvas(W, H), x = c.getContext('2d');
-  x.fillStyle = '#e9e2d6'; x.fillRect(0, 0, W, H);
-  const cx = W / 2, cy = H / 2, R = 104;
-  // 馬の目：ほとんどが濃い茶色の黒目。ひとみは横長
-  const ig = x.createRadialGradient(cx, cy + 10, 10, cx, cy, R);
-  ig.addColorStop(0, '#120a06'); ig.addColorStop(0.42, '#2e1a0e'); ig.addColorStop(0.74, '#5b3519'); ig.addColorStop(0.9, '#33200f'); ig.addColorStop(1, '#170d07');
-  x.fillStyle = ig; x.beginPath(); x.arc(cx, cy, R, 0, Math.PI * 2); x.fill();
-  x.fillStyle = '#060403'; x.beginPath(); x.ellipse(cx, cy + 4, R * 0.5, R * 0.24, 0, 0, Math.PI * 2); x.fill();
-  // やわらかい光（空の映りこみ）
-  const hg = x.createRadialGradient(cx - 20, cy - 36, 2, cx - 20, cy - 36, 30); hg.addColorStop(0, 'rgba(255,255,255,1)'); hg.addColorStop(0.55, 'rgba(255,255,255,0.85)'); hg.addColorStop(1, 'rgba(255,255,255,0)');
-  x.fillStyle = hg; x.beginPath(); x.ellipse(cx - 20, cy - 36, 30, 24, -0.3, 0, Math.PI * 2); x.fill();
-  x.fillStyle = 'rgba(255,255,255,0.75)'; x.beginPath(); x.arc(cx + 28, cy + 30, 8, 0, Math.PI * 2); x.fill();
-  EYE_T = new THREE.CanvasTexture(c); EYE_T.colorSpace = THREE.SRGBColorSpace; EYE_T.anisotropy = 4;
-  return EYE_T;
-}
-// 顔の色（鼻先のかげ・流星）。頭のロフトのuv：u=後ろ→鼻先、v=横→顔の正面(0.25)→反対の横→あご
-const HEADT = {};
-export function headTex(body, muzzle, blaze, umap, eye) {
-  const key = body + '_' + muzzle + '_' + blaze;
-  if (HEADT[key]) return HEADT[key];
-  const W = 256, H = 256, c = canvas(W, H), x = c.getContext('2d');
-  const cb = new THREE.Color(body), cm = new THREE.Color(muzzle);
-  const css = (col) => '#' + col.getHexString();
-  const sb = cb, sm = cm;
-  const g = x.createLinearGradient(0, 0, W, 0);
-  g.addColorStop(0, css(sb)); g.addColorStop(umap(0.55), css(sb)); g.addColorStop(umap(0.68), css(sm)); g.addColorStop(1, css(sm));
-  x.fillStyle = g; x.fillRect(0, 0, W, H);
-  // 目のまわり（くぼみ）は少し濃く
-  const vy = (v) => (1 - v) * H;
-  if (eye) for (const ev of [eye[1], eye[2]]) { const gx = eye[0] * W, gy = vy(ev); const gr = x.createRadialGradient(gx, gy, 2, gx, gy, 30); gr.addColorStop(0, 'rgba(40,20,10,0.35)'); gr.addColorStop(0.6, 'rgba(40,20,10,0.15)'); gr.addColorStop(1, 'rgba(40,20,10,0)'); x.fillStyle = gr; x.fillRect(gx - 32, gy - 32, 64, 64); }
-  if (blaze) {
-    x.fillStyle = '#f6f2ea';
-    const pts = blaze === 1 ? [[0.08, 0.035], [0.13, 0.05], [0.19, 0.03], [0.22, 0.0]] : blaze === 2 ? [[0.06, 0.02], [0.1, 0.045], [0.3, 0.025], [0.5, 0.02], [0.62, 0.035], [0.68, 0.05], [0.7, 0.0]] : [[0.05, 0.025], [0.1, 0.06], [0.3, 0.045], [0.5, 0.04], [0.6, 0.06], [0.68, 0.075], [0.74, 0.07]];
-    x.beginPath();
-    pts.forEach(([u, w], i) => { const X = umap(u) * W, Y = vy(0.25 + w); i ? x.lineTo(X, Y) : x.moveTo(X, Y); });
-    for (let i = pts.length - 1; i >= 0; i--) { const [u, w] = pts[i]; x.lineTo(umap(u) * W, vy(0.25 - w)); }
-    x.closePath(); x.filter = 'blur(2px)'; x.fill(); x.filter = 'none';
-  }
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
-  return (HEADT[key] = t);
-}
-// ゲート上の横断幕（赤地・金のふち・白っぽい金文字）
-export function bannerTex(text) {
-  const w = 1024, h = 128, c = canvas(w, h), x = c.getContext('2d');
-  if (MIRROR) { x.translate(w, 0); x.scale(-1, 1); }
-  const g = x.createLinearGradient(0, 0, 0, h); g.addColorStop(0, '#e0242a'); g.addColorStop(0.55, '#c3161c'); g.addColorStop(1, '#8e0d12');
-  x.fillStyle = g; x.fillRect(0, 0, w, h);
-  x.fillStyle = '#f3c84b'; x.fillRect(0, 8, w, 6); x.fillRect(0, h - 14, w, 6);
-  // 両はしの菱形の飾り
-  for (const cx of [40, w - 40]) { x.save(); x.translate(cx, h / 2); x.rotate(Math.PI / 4); x.fillStyle = '#f7f1dc'; x.fillRect(-19, -19, 38, 38); x.fillStyle = '#d8a93a'; x.fillRect(-11, -11, 22, 22); x.restore(); }
-  const size = Math.min(80, Math.floor((w - 160) / Math.max(4, [...String(text)].length) * 1.05));
-  x.font = `900 ${size}px "Hiragino Mincho ProN","Noto Serif JP","Hiragino Sans","Noto Sans JP",serif`;
-  x.textAlign = 'center'; x.textBaseline = 'middle';
-  x.lineJoin = 'round'; x.strokeStyle = '#5a0608'; x.lineWidth = 10; x.strokeText(text, w / 2, h / 2 + 4);
-  const tg = x.createLinearGradient(0, h / 2 - size / 2, 0, h / 2 + size / 2); tg.addColorStop(0, '#fff7d6'); tg.addColorStop(0.6, '#ffe07a'); tg.addColorStop(1, '#e7b23a');
-  x.fillStyle = tg; x.fillText(text, w / 2, h / 2 + 4);
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
-  return t;
-}
-// ゲートのクッション（白い板にうっすらステッチ）
-export function padTex() {
-  const c = canvas(128, 128), x = c.getContext('2d');
-  const g = x.createLinearGradient(0, 0, 0, 128); g.addColorStop(0, '#fbfbf8'); g.addColorStop(1, '#dcdedb');
-  x.fillStyle = g; x.fillRect(0, 0, 128, 128);
-  x.strokeStyle = 'rgba(120,130,125,0.35)'; x.lineWidth = 2;
-  for (let i = 1; i < 4; i++) { x.beginPath(); x.moveTo(i * 32, 6); x.lineTo(i * 32, 122); x.stroke(); }
-  x.strokeRect(4, 4, 120, 120);
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
-}
-// もくもくの雲（ビルボード用）。seedで形を変える
-export function cloudTex(seed = 1) {
-  const W = 512, H = 256, c = canvas(W, H), x = c.getContext('2d');
-  let s = seed * 7919 + 13; const R = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
-  const puffs = [];
-  const n = 9 + Math.floor(R() * 6);
-  for (let i = 0; i < n; i++) {
-    const t = i / (n - 1), cx = 60 + t * (W - 120) + (R() - 0.5) * 30;
-    const r = (40 + Math.sin(t * Math.PI) * 70) * (0.75 + R() * 0.45);
-    puffs.push([cx, H - 50 - r * (0.55 + R() * 0.35), r]);
-  }
-  for (let i = 0; i < 6; i++) { const cx = 120 + R() * (W - 240); puffs.push([cx, H - 40 - R() * 30, 30 + R() * 30]); }
-  x.filter = 'blur(1.5px)';
-  x.fillStyle = '#ffffff';
-  for (const [cx, cy, r] of puffs) { x.beginPath(); x.arc(cx, cy, r, 0, Math.PI * 2); x.fill(); }
-  x.fillRect(70, H - 62, W - 140, 22);
-  // 下側のかげ（青みのある灰色）と、ふくらみごとのかげ
-  x.globalCompositeOperation = 'source-atop'; x.filter = 'blur(8px)';
-  for (const [cx, cy, r] of puffs) { const g = x.createRadialGradient(cx - r * 0.25, cy - r * 0.35, r * 0.2, cx, cy, r * 1.05); g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(0.75, 'rgba(205,215,232,0.0)'); g.addColorStop(1, 'rgba(190,202,224,0.55)'); x.fillStyle = g; x.beginPath(); x.arc(cx, cy, r, 0, Math.PI * 2); x.fill(); }
-  const gb = x.createLinearGradient(0, H * 0.35, 0, H - 40); gb.addColorStop(0, 'rgba(180,192,215,0)'); gb.addColorStop(1, 'rgba(170,184,210,0.75)');
-  x.fillStyle = gb; x.fillRect(0, 0, W, H);
-  x.globalCompositeOperation = 'source-over'; x.filter = 'none';
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
-  return t;
 }

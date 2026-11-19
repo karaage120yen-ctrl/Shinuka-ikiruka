@@ -1,3 +1,4 @@
+import { initPortraits, horsePortrait } from './portrait.js';
 import { initNet } from './net.js';
 import { home } from './ui.js';
 import { startRace } from './racescreen.js';
@@ -7,6 +8,8 @@ window.__race3d = (o) => startRace({ race: { name: o.title || 'テスト', dist:
 
 home();
 initNet();
+initPortraits();
+window.__portrait = horsePortrait;
 // 最初にさわったときに音を使えるようにする（スマホは操作がないと音が出せない）
 import * as A from './audio.js';
 import { S } from './store.js';

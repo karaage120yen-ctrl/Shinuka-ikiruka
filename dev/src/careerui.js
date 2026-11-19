@@ -1,3 +1,4 @@
+import { horseFace } from './portrait.js';
 // ===== 育成の画面（サッカーやるよんと同じ構成） =====
 import { COAT, SILKS, STYLES, COND_NAMES, fmtTime, rankColor } from './data.js';
 import { S, save, newId } from './store.js';
@@ -51,7 +52,7 @@ function pcard(p, mode = 'full') {
   if (p.kind === 'horse') {
     sub = `${p.age}歳・${K.STAGE_NAME[st]}`;
     tags = [p.sex || '', p.style, G.n, `芝${p.apt.turf}・ダ${p.apt.dirt}`].filter(Boolean).map(t => `<span>${esc(t)}</span>`).join('') + (p.rival && !pre ? `<span class="rv">ライバル ${esc(p.rival.name)} ${p.rival.w || 0}勝${p.rival.l || 0}敗</span>` : '');
-    face = `<div class="face" style="--c:${hex(COAT[p.coat].body)}">🐴</div>`;
+    face = horseFace(p.coat, p.name);
   } else {
     const sb = K.stableOf(p);
     sub = `${p.age}歳・${p.stage === 'school' ? '競馬学校' : p.free ? 'フリー' : sb ? sb.n : 'プロ騎手'}`;

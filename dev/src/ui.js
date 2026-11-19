@@ -1,3 +1,4 @@
+import { horseFace } from './portrait.js';
 // ===== 画面（メニュー・育成・一覧・ガチャ・対戦） =====
 import { H_KEYS, H_NAMES, J_KEYS, J_NAMES, COND_NAMES, COND_COLORS, COAT, SILKS, STYLES, GRADED,
   rankOf, rankColor, fmtMoney, fmtTime, randomHorseName, randomJockeyName, pick } from './data.js';
@@ -95,8 +96,8 @@ function listScreen(tab = 'h') {
   <div class="page">
     <div class="tabs"><button class="${tab === 'h' ? 'on' : ''}" data-act="tab" data-v="h">馬（${horses.length}）</button><button class="${tab === 'j' ? 'on' : ''}" data-act="tab" data-v="j">騎手（${jockeys.length}）</button></div>
     ${tab === 'h' ? (horses.length ? horses.map((h, i) => `<button class="lcard" data-act="hd" data-v="${i}">
-      <div class="lrank" style="color:${rankColor(h.rank || 'G')}">${h.rank || '-'}</div>
-      <div class="linfo"><b><i class="dot sm" style="background:${hex(COAT[h.coat].body)}"></i>${esc(h.name)}</b>
+      ${horseFace(h.coat, h.name, 'sm')}<div class="lrank" style="color:${rankColor(h.rank || 'G')}">${h.rank || '-'}</div>
+      <div class="linfo"><b>${esc(h.name)}</b>
       <small>${h.record.join('-')}　${fmtMoney(h.earnings)}${h.g1Wins ? `　G1 ${h.g1Wins}勝` : ''}</small>
       <small class="muted">${esc(h.retireReason || '')}</small></div></button>`).join('') : '<div class="empty">まだ引退した馬はいません。<br>馬を育てて引退させると、ここに残ります。</div>')
     : (jockeys.length ? jockeys.map((j, i) => { const avg = J_KEYS.reduce((a, k) => a + j.s[k], 0) / 5; return `<button class="lcard" data-act="jd" data-v="${i}">
@@ -108,7 +109,7 @@ function listScreen(tab = 'h') {
 
 function horseDetail(h) {
   const races = (h.races || []).slice().reverse();
-  const m = modal(`<h2><i class="dot sm" style="background:${hex(COAT[h.coat].body)}"></i>${esc(h.name)}</h2>
+  const m = modal(`${horseFace(h.coat, h.name, 'big')}<h2>${esc(h.name)}</h2>
     <p class="center muted">${h.sex || ''}　父 ${esc(h.sire)}　母 ${esc(h.dam)}　${COAT[h.coat].name}${h.foals ? `　産駒${h.foals}頭` : ''}</p>
     ${h.ped ? `<table class="ped"><tr><td rowspan="2">父<br><b>${esc(h.ped.s)}</b></td><td>${esc(h.ped.ss || '—')}</td></tr><tr><td>${esc(h.ped.sd || '—')}</td></tr><tr><td rowspan="2">母<br><b>${esc(h.ped.d)}</b></td><td>${esc(h.ped.ds || '—')}</td></tr><tr><td>${esc(h.ped.dd || '—')}</td></tr></table>` : ''}
     ${H_KEYS.map(k => statRow(H_NAMES[k], h.s[k])).join('')}
@@ -259,7 +260,6 @@ function settingsScreen() {
     <label class="sw-row"><span>🔔 効果音</span><input type="range" id="v-sfx" min="0" max="100" value="${Math.round(((S.settings.vol || {}).sfx ?? 0.8) * 100)}"></label>
     <label class="sw-row"><span>📣 歓声</span><input type="range" id="v-crowd" min="0" max="100" value="${Math.round(((S.settings.vol || {}).crowd ?? 0.7) * 100)}"></label>
     <label class="sw-row"><span>レース前のパドック・ファンファーレ</span><input type="checkbox" id="prerace" ${S.settings.prerace !== false ? 'checked' : ''}></label>
-    <label class="sw-row"><span>スタートはゲートの正面から見る</span><input type="checkbox" id="startcut" ${S.settings.startCut !== false ? 'checked' : ''}></label>
     <label class="sw-row"><span>カットシーン</span><input type="checkbox" id="cuts" ${S.settings.cuts !== false ? 'checked' : ''}></label>
     <label class="sw-row"><span>レースの視点（最初）</span><select id="vw"><option value="fp" ${S.settings.view === 'fp' ? 'selected' : ''}>騎手視点</option><option value="back" ${S.settings.view === 'back' ? 'selected' : ''}>後ろから</option><option value="tv" ${S.settings.view === 'tv' ? 'selected' : ''}>中継</option></select></label></div>
     <div class="card"><b>遊び方</b><p class="small">馬は0歳から育てて、2歳6月からレースに出られます。7歳の年末か、重い故障で引退。疲れたまま調教するとケガをしやすく、重い故障だと競走生命の危機に。<br>レースは騎手視点。◀▶で進路を変え、ムチで加速。体力ゲージの使い方が勝負の分かれ目です。</p></div>
@@ -270,7 +270,6 @@ function settingsScreen() {
   document.getElementById('snd').onchange = (e) => { S.settings.sound = e.target.checked; setSound(S.settings.sound); save(); };
   for (const k of ['bgm', 'sfx', 'crowd']) document.getElementById('v-' + k).oninput = (e) => { S.settings.vol = { bgm: 0.5, sfx: 0.8, crowd: 0.7, ...(S.settings.vol || {}), [k]: +e.target.value / 100 }; initAudio(); setVolumes(S.settings.vol); save(); };
   document.getElementById('prerace').onchange = (e) => { S.settings.prerace = e.target.checked; save(); };
-  document.getElementById('startcut').onchange = (e) => { S.settings.startCut = e.target.checked; save(); };
   document.getElementById('snd').addEventListener('change', () => { if (S.settings.sound) { initAudio(); playBgm('menu', true); } });
   document.getElementById('cuts').onchange = (e) => { S.settings.cuts = e.target.checked; save(); };
   document.getElementById('vw').onchange = (e) => { S.settings.view = e.target.value; save(); };
