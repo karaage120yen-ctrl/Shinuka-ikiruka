@@ -95,16 +95,20 @@ function horseGeos() {
   // 頭の形：鼻先を少し丸く大きく、口元は少し濃い色
   const muzzle = rel(mergeGeometries([g(new THREE.SphereGeometry(0.105, 16, 12), hd(0.56), 0, V(1.05, 0.95, 0.9))].map(NI)));
   // まんまるの目（白目・黒目・光）
-  const eyeAt = (side) => hd(0.1).add(V(Math.cos(beta + Math.PI / 2) * 0.07, Math.sin(beta + Math.PI / 2) * 0.07, side * 0.1));
-  const eyeW = rel(mergeGeometries([1, -1].map(sd => NI(g(new THREE.SphereGeometry(0.066, 16, 12), eyeAt(sd), 0, V(1, 1.1, 0.62))))));
-  const eyeB = rel(mergeGeometries([1, -1].map(sd => NI(g(new THREE.SphereGeometry(0.052, 14, 10), eyeAt(sd).add(V(0.018, -0.006, sd * 0.024)), 0, V(1, 1.18, 0.62))))));
-  const eyeH = rel(mergeGeometries([1, -1].flatMap(sd => [NI(g(new THREE.SphereGeometry(0.017, 8, 6), eyeAt(sd).add(V(0.036, 0.026, sd * 0.044)))), NI(g(new THREE.SphereGeometry(0.008, 6, 5), eyeAt(sd).add(V(0.012, -0.024, sd * 0.05))))])));
+  const eyeAt = (side) => hd(0.12).add(V(Math.cos(beta + Math.PI / 2) * 0.095, Math.sin(beta + Math.PI / 2) * 0.095, side * 0.078));
+  const EYE_T = 0.62; // 目を少し前に向けて、正面からも見えるように
+  const eyeP = (sd, geo, sc, off) => { geo.scale(sc.x, sc.y, sc.z); geo.translate(off.x, off.y, sd * off.z); geo.rotateY(sd * EYE_T); const p = eyeAt(sd); geo.translate(p.x, p.y, p.z); return NI(geo); };
+  const eyeW = rel(mergeGeometries([1, -1].map(sd => eyeP(sd, new THREE.SphereGeometry(0.062, 18, 12), V(1, 1.12, 0.36), V(0, 0, 0)))));
+  const eyeB = rel(mergeGeometries([1, -1].map(sd => eyeP(sd, new THREE.SphereGeometry(0.046, 14, 10), V(1, 1.2, 0.36), V(0.004, -0.006, 0.01)))));
+  const eyeH = rel(mergeGeometries([1, -1].flatMap(sd => [eyeP(sd, new THREE.SphereGeometry(0.015, 8, 6), V(1, 1, 0.5), V(0.018, 0.024, 0.026)), eyeP(sd, new THREE.SphereGeometry(0.007, 6, 5), V(1, 1, 0.5), V(-0.012, -0.022, 0.026))])));
+  // まぶたのライン（目の上の細い弧で、やさしい目つきに）
+  const lid = rel(mergeGeometries([1, -1].map(sd => { const t = new THREE.TorusGeometry(0.062, 0.007, 6, 16, Math.PI * 0.9); t.rotateZ(Math.PI * 0.05); return eyeP(sd, t, V(1, 1.12, 1), V(0, 0.004, 0.02)); })));
   // ほっぺ（うすいピンク）
   const blush = rel(mergeGeometries([1, -1].map(sd => NI(g(new THREE.SphereGeometry(0.055, 14, 10), hd(0.24).add(V(-0.03, -0.045, sd * 0.1)), 0, V(1.15, 0.8, 0.28))))));
   // 覆面（メンコ）：頭の上半分を包む布と、目のまわりのカップ
   const hood = rel(mergeGeometries([
     NI(loft([hs(-0.12, 0.16, 0.175, 0.13), hs(0.06, 0.15, 0.22, 0.138), hs(0.22, 0.123, 0.14, 0.113), hs(0.34, 0.1, 0.105, 0.094)], 20)),
-    ...[1, -1].map(sd => NI(g(new THREE.TorusGeometry(0.074, 0.022, 8, 18), eyeAt(sd).add(V(0, 0, sd * 0.004)), 0, V(1, 1.08, 1), 0, sd * 0.35))),
+    ...[1, -1].map(sd => eyeP(sd, new THREE.TorusGeometry(0.072, 0.02, 8, 18), V(1, 1.1, 1), V(0, 0, 0.0))),
   ]));
   // まるい葉っぱ形の耳（内側はピンク）
   const earAt = (sd) => E.clone().add(V(-0.03, 0.2, sd * 0.085));
@@ -168,7 +172,7 @@ function horseGeos() {
     g(new THREE.BoxGeometry(0.16, 0.08, 0.36), V(0.32, 1.72, 0)),
     g(new THREE.TorusGeometry(0.4, 0.025, 6, 20, Math.PI), V(0.1, 1.3, 0), 0, null, 0, Math.PI / 2), // 腹帯
   ].map(NI));
-  geoCache.h = { earIn, blush, beta, body, neck, head, muzzle, eyeW, eyeB, eyeH, hood, fore, E, ears, mane, eyes, blaze, bridle, upperF, lowerF, pastF, hoof, upperH, lowerH, sock, tail, saddle, bit, alpha };
+  geoCache.h = { lid, earIn, blush, beta, body, neck, head, muzzle, eyeW, eyeB, eyeH, hood, fore, E, ears, mane, eyes, blaze, bridle, upperF, lowerF, pastF, hoof, upperH, lowerH, sock, tail, saddle, bit, alpha };
   return geoCache.h;
 }
 
@@ -263,9 +267,11 @@ export function buildHorse(coat, silkColor, num, opts = {}) {
   const G = horseGeos();
   const root = new THREE.Group();
   const bodyG = new THREE.Group(); root.add(bodyG);
-  const coatMat = new THREE.MeshStandardMaterial({ color: coat.body, roughness: 0.32, metalness: 0.04, map: COAT_MAP });
+  // 毛のやわらかさ：つやを抑え、ふちにうっすら光る「シーン」で毛皮らしく
+  const furMat = (col, extra = {}) => new THREE.MeshPhysicalMaterial({ color: col, map: COAT_MAP, bumpMap: COAT_MAP.bump, bumpScale: 0.9, roughness: 0.8, metalness: 0, sheen: 1, sheenRoughness: 0.5, sheenColor: new THREE.Color(col).lerp(new THREE.Color(0xffffff), 0.45), envMapIntensity: 0.35, ...extra });
+  const coatMat = furMat(coat.body);
   const maneMat = mat(coat.mane, { roughness: 0.8 });
-  const legMat = new THREE.MeshStandardMaterial({ color: coat.leg, roughness: 0.5, map: COAT_MAP });
+  const legMat = furMat(coat.leg);
   const hoofMat = mat(0x1a1a1a, { roughness: 0.4 });
   const body = new THREE.Mesh(G.body, coatMat); bodyG.add(body);
   const saddle = new THREE.Mesh(G.saddle, mat(0x2a1a10, { roughness: 0.5 })); bodyG.add(saddle);
@@ -287,12 +293,13 @@ export function buildHorse(coat, silkColor, num, opts = {}) {
   const headG = new THREE.Group(); headG.scale.set(HEAD_K.x, HEAD_K.y, HEAD_K.z); headR.add(headG);
   headG.add(new THREE.Mesh(G.head, coatMat));
   const mz = new THREE.Color(coat.body).multiplyScalar(coat.name === '芦毛' ? 0.55 : 0.62);
-  headG.add(new THREE.Mesh(G.muzzle, new THREE.MeshStandardMaterial({ color: mz, roughness: 0.4, map: COAT_MAP })));
+  headG.add(new THREE.Mesh(G.muzzle, furMat(mz, { roughness: 0.7, bumpScale: 0.4 })));
   headG.add(new THREE.Mesh(G.ears, coatMat));
   headG.add(new THREE.Mesh(G.earIn, mat(0xf2a0a8, { roughness: 0.6 })));
   headG.add(new THREE.Mesh(G.blush, new THREE.MeshStandardMaterial({ color: 0xff7f96, roughness: 0.7, transparent: true, opacity: 0.75, depthWrite: false })));
-  headG.add(new THREE.Mesh(G.eyeW, mat(0xffffff, { roughness: 0.15 })));
-  headG.add(new THREE.Mesh(G.eyeB, mat(0x0a0604, { roughness: 0.08 })));
+  headG.add(new THREE.Mesh(G.eyeW, mat(0xf6f3ee, { roughness: 0.3 })));
+  headG.add(new THREE.Mesh(G.eyeB, mat(0x1a0e08, { roughness: 0.15 })));
+  headG.add(new THREE.Mesh(G.lid, mat(new THREE.Color(coat.body).multiplyScalar(0.45).getHex(), { roughness: 0.8 })));
   headG.add(new THREE.Mesh(G.eyeH, new THREE.MeshBasicMaterial({ color: 0xffffff })));
   const hoodC = opts.hood ?? (Math.random() < 0.3 ? [0x1d6bff, 0x18a84a, 0xe02828, 0xf2c200, 0xf97316, 0x7c3aed, 0xffffff][Math.floor(Math.random() * 7)] : null);
   if (hoodC != null) headG.add(new THREE.Mesh(G.hood, mat(hoodC, { roughness: 0.55 })));

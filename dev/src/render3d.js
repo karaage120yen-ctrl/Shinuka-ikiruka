@@ -575,7 +575,7 @@ export class RaceView {
       if (H.coatMat) {
         const tired = 1 - Math.max(0, Math.min(1, r.energy / r.cap / 0.6));
         const sw = Math.min(1, (this.race.t || 0) / 40) * 0.35 + tired * 0.65;
-        H.coatMat.roughness = 0.42 - sw * 0.24;
+        H.coatMat.roughness = 0.8 - sw * 0.32; if (H.coatMat.sheen != null) H.coatMat.sheen = 1 - sw * 0.5;
         H.coatMat.color.copy(H.coatBase).multiplyScalar(1 - sw * 0.18);
       }
     }

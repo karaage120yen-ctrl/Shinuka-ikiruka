@@ -229,17 +229,34 @@ export function clothTex(num, color) {
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
 }
 // 毛並み（つや）
+// 毛並み：体の向き（u方向）に流れる短い毛をたくさん描く。色はマテリアル側で付ける
+const FUR = {};
 export function coatTex() {
-  const c = canvas(256, 256), x = c.getContext('2d');
-  x.fillStyle = '#ffffff'; x.fillRect(0, 0, 256, 256);
-  x.globalAlpha = 0.07;
-  for (let i = 0; i < 4000; i++) {
-    x.fillStyle = Math.random() < 0.5 ? '#000' : '#fff';
-    const px = Math.random() * 256, py = Math.random() * 256;
-    x.fillRect(px, py, 1, 3 + Math.random() * 5);
+  if (!FUR.c) {
+    const S = 512, c = canvas(S, S), x = c.getContext('2d');
+    x.fillStyle = '#e9e9e9'; x.fillRect(0, 0, S, S);
+    // ゆるいムラ（毛の流れのかたまり）
+    for (let i = 0; i < 260; i++) { const v = 200 + Math.random() * 55; x.fillStyle = `rgba(${v},${v},${v},0.25)`; x.beginPath(); x.ellipse(Math.random() * S, Math.random() * S, 20 + Math.random() * 40, 6 + Math.random() * 12, (Math.random() - 0.5) * 0.4, 0, Math.PI * 2); x.fill(); }
+    // 毛（明るい毛と暗い毛）
+    x.lineCap = 'round';
+    for (let i = 0; i < 52000; i++) {
+      const px = Math.random() * S, py = Math.random() * S, l = 5 + Math.random() * 11, a = (Math.random() - 0.5) * 0.35;
+      const v = Math.random() < 0.5 ? 255 : 150 + Math.random() * 40;
+      x.strokeStyle = `rgba(${v},${v},${v},${0.18 + Math.random() * 0.22})`; x.lineWidth = 0.6 + Math.random() * 0.9;
+      x.beginPath(); x.moveTo(px, py); x.quadraticCurveTo(px + l * 0.5, py + a * l * 0.5 + 0.6, px + l, py + a * l); x.stroke();
+    }
+    FUR.c = c;
+    // でこぼこ（毛の立体感）
+    const b = canvas(S, S), bx = b.getContext('2d'); bx.fillStyle = '#808080'; bx.fillRect(0, 0, S, S); bx.lineCap = 'round';
+    for (let i = 0; i < 40000; i++) {
+      const px = Math.random() * S, py = Math.random() * S, l = 4 + Math.random() * 9, v = Math.random() < 0.5 ? 200 : 60;
+      bx.strokeStyle = `rgba(${v},${v},${v},0.35)`; bx.lineWidth = 0.8; bx.beginPath(); bx.moveTo(px, py); bx.lineTo(px + l, py + (Math.random() - 0.5) * 2); bx.stroke();
+    }
+    FUR.b = b;
   }
-  x.globalAlpha = 1;
-  return tex(c, 2, 2);
+  const t = tex(FUR.c, 5, 3); t.anisotropy = 4;
+  t.bump = new THREE.CanvasTexture(FUR.b); t.bump.wrapS = t.bump.wrapT = THREE.RepeatWrapping; t.bump.repeat.set(5, 3);
+  return t;
 }
 // 黒いぼかし影
 export function blobTex() {
