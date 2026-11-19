@@ -9,7 +9,7 @@ import { playCuts } from './cut.js';
 import { NPC_SIRES, NPC_DAMS, makeFoal, preview, sexOf } from './breed.js';
 import { checkAch } from './ach.js';
 import { playBgm } from './audio.js';
-import { deckFx, GACHA_POOL, charLabel } from './gacha.js';
+import { deckFx, GACHA_POOL, charLabel, charJockeyOpts, fxText, lvOf } from './gacha.js';
 import { bondN, bondLv, BOND_NAME, addBond, applyBond } from './combo.js';
 import { randomHorseName, randomJockeyName, H_KEYS } from './data.js';
 import { mission } from './mission.js';
@@ -139,7 +139,8 @@ function drawDraft() {
     <div class="kick">${H ? '牧場レポート' : 'スカウトレポート'}<span class="r">No.${String(d.n).padStart(3, '0')}</span></div>
     <p class="note">${lead}</p>${pcard(p, 'preview')}${scout}${inh}${supHtml(d.kind)}
     <div class="stack"><button class="btn red" data-act="dstart">${H ? 'この馬で始める' : 'この騎手で始める'}</button><button class="btn ghost" data-act="dreroll">${d.custom ? '能力を引き直す' : H ? '別の馬を探す' : '別の人を探す'}</button>
-    ${H ? `<button class="btn race" data-act="dbreed">🧬 配合して産ませる（父と母を選ぶ）</button>` : ''}</div>
+    ${H ? `<button class="btn race" data-act="dbreed">🧬 配合して産ませる（父と母を選ぶ）</button>` : `<button class="btn race" data-act="dchar">🎰 ガチャキャラを騎手として育てる</button>`}</div>
+    ${d.charId ? `<p class="note">🎰 ガチャキャラ「${esc(p.name)}」を育てる。素質が高く、キャラ自身の効果が1.5倍でずっと効く。</p>` : ''}
     ${d.bred ? `<p class="note">配合で生まれた仔。父${esc(p.sire)}・母${esc(p.dam)}${p.gen >= 2 ? `　自分の血統 ${p.gen}代目` : ''}</p>` : ''}
     <button class="linkbtn" data-act="dcustom">${d.custom ? 'おまかせに戻す' : H ? '名前や毛色を自分で決める' : '名前や勝負服を自分で決める'}</button>${custom}</div>`;
   const nm = () => { const el = document.getElementById('cname'); if (el) p.name = el.value.trim() || p.name; };
@@ -147,9 +148,10 @@ function drawDraft() {
   app.querySelectorAll('[data-act]').forEach(el => el.onclick = () => {
     const a = el.dataset.act, v = el.dataset.v;
     if (a === 'home') return goHome();
-    if (a === 'dreroll') { d.bred = false; if (d.custom) remake({}); else { d.prev = H ? K.makeHorse() : K.makeJockey(); d.n++; drawDraft(); } }
+    if (a === 'dreroll') { d.bred = false; d.charId = null; if (d.custom) remake({}); else { d.prev = H ? K.makeHorse() : K.makeJockey(); d.n++; drawDraft(); } }
     if (a === 'dsex') { nm(); p.sex = v; drawDraft(); }
     if (a === 'dbreed') { nm(); return drawBreed(); }
+    if (a === 'dchar') { return drawCharPick(); }
     if (a === 'dcustom') { nm(); d.custom = !d.custom; drawDraft(); }
     if (a === 'dset') { const k = el.dataset.k; remake({ [k]: ['coat', 'silk'].includes(k) ? +v : v, sex: p.sex }); }
     if (a === 'dpar') { const i = +v; const j = d.parents.indexOf(i); if (j >= 0) d.parents.splice(j, 1); else if (d.parents.length < 3) d.parents.push(i); nm(); drawDraft(); }
@@ -159,7 +161,8 @@ function drawDraft() {
       const pars = d.parents.map(i => pool[i]).filter(Boolean);
       const got = K.inherit(p2, pars);
       // サポートの効果
-      p2.sup = deckFx(d.kind, (S.deck || {})[d.kind], S.gacha);
+      p2.sup = deckFx(d.kind, (S.deck || {})[d.kind], S.gacha, d.charId || null);
+      if (d.charId) { p2.charId = d.charId; got.push(`ガチャキャラ ${p2.name} として騎手を目指す`); }
       for (const [k, v] of Object.entries(p2.sup.start)) { p2.st[k] = Math.min(99, p2.st[k] + v); }
       if (p2.sup.ids.length) got.push(`サポート ${p2.sup.ids.length}人の力を借りる`);
       if (d.bred && d.damRef && !d.damRef.npc) d.damRef.foals = (d.damRef.foals || 0) + 1;
@@ -177,6 +180,30 @@ function drawDraft() {
 function supHtml(kind) {
   const deck = ((S.deck || {})[kind] || []).filter(id => (S.gacha || []).includes(id));
   return `<div class="kick">サポート編成（ガチャ）</div><p class="note">${deck.length ? deck.map(id => { const c = GACHA_POOL.find(x => x.id === id); return c ? `<b class="r-${c.rarity}">${c.rarity}</b> ${esc(charLabel(c))}` : ''; }).join('<br>') : 'まだ誰も編成していない（ガチャ画面の「編成」で3人まで選べる）'}</p>`;
+}
+
+// ===== ガチャキャラを選んで騎手にする =====
+function drawCharPick() {
+  const d = S._draft;
+  const owned = {}; for (const id of S.gacha) owned[id] = (owned[id] || 0) + 1;
+  const list = GACHA_POOL.filter(c => owned[c.id]);
+  document.getElementById('app').innerHTML = `${header('ガチャキャラを育てる')}<div class="page career">
+    <p class="note">ガチャで手に入れたキャラを、騎手として1から育てる。レア度と凸が高いほど素質が高い（SSR・SR・R）。キャラ自身の効果は1.5倍になり、育成中ずっと効く。</p>
+    ${list.length ? `<div class="plist">${list.map(c => `<button class="pitem" data-act="cpick" data-v="${c.id}"><b><span class="r-${c.rarity}">${c.rarity}</span> ${esc(charLabel(c))}${lvOf(owned, c.id) ? ` ◆${lvOf(owned, c.id)}` : ''}</b><small>${fxText(c.fx, lvOf(owned, c.id)).join('・')}</small></button>`).join('')}</div>` : '<div class="empty">まだキャラがいない。ガチャを引こう。</div>'}
+    <div class="stack"><button class="btn ghost" data-act="back">戻る</button></div></div>`;
+  document.getElementById('app').querySelectorAll('[data-act]').forEach(el => el.onclick = () => {
+    const a = el.dataset.act, v = el.dataset.v;
+    if (a === 'home') return goHome();
+    if (a === 'back') return drawDraft();
+    if (a === 'cpick') {
+      const c = GACHA_POOL.find(x => x.id === v), o = charJockeyOpts(c, S.gacha);
+      const p = K.makeJockey({ name: o.name, pot: o.pot });
+      for (const k in p.st) p.st[k] += o.bonus;
+      p.flags.potEst = K.potGrade(o.pot);
+      d.prev = p; d.charId = c.id; d.custom = false; d.bred = false; d.parents = [];
+      save(); return drawDraft();
+    }
+  });
 }
 
 // ===== 配合 =====
@@ -390,6 +417,7 @@ function doRetire(C) {
   const p = C.p;
   const card = K.toCard(p);
   card.id = p.id ?? newId();
+  if (p.charId) card.charId = p.charId;
   if (p.kind === 'horse') S.horses.unshift(card); else S.jockeys.unshift(card);
   const bonus = 20 + Math.round((p.g1Wins || 0) * 20 + (p.gradedWins || 0) * 5);
   S.carrots += bonus;

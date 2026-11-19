@@ -12,6 +12,7 @@
 // 重ね（同じキャラが出る）で凸が上がり、効果が 1凸ごとに +25%（最大4凸で2倍）
 export const NAMES = {
   // 'ssr-1': '',
+  'ssr-7': 'ナベブギョウ',
 };
 
 const H = ['spd', 'sta', 'pow', 'gut', 'wis'], J = ['tec', 'whip', 'bal', 'fit', 'jud'];
@@ -26,6 +27,8 @@ P.push(mk('SSR', 3, 'horse', '獣医', { inj: 0.3, train: { pow: 0.2 } }));
 P.push(mk('SSR', 4, 'jockey', '先輩騎手', { train: { tec: 0.3 }, start: { jud: 4 } }));
 P.push(mk('SSR', 5, 'jockey', 'トレーナー', { train: { fit: 0.3 }, inj: 0.15 }));
 P.push(mk('SSR', 6, 'both', '馬主', { money: 0.25, ev: 0.06 }));
+// ピックアップ：ナベブギョウ（鍋で体を作る食事番。馬にも騎手にも効く）
+P.push(mk('SSR', 7, 'both', '鍋奉行', { sta: 3, cond: 1.5, train: { sta: 0.15, gut: 0.15 }, inj: 0.1 }));
 // SR：1〜2つの効果
 const SRX = [
   ['horse', '厩務員', { train: { gut: 0.2 }, cond: 1 }], ['horse', '調教助手', { train: { wis: 0.2 } }], ['horse', '装蹄師', { inj: 0.18 }],
@@ -43,6 +46,7 @@ RX.forEach(([k, r, fx], i) => P.push(mk('R', i + 1, k, r, fx)));
 
 export const GACHA_POOL = P;
 export const RATES = { SSR: 0.03, SR: 0.18, R: 0.79 };
+export const PICKUP = 'ssr-7', PICKUP_RATE = 0.015; // SSRの半分はナベブギョウ。期間なし
 export const COST_1 = 10, COST_10 = 100, PITY = 100;
 export const charName = (c) => NAMES[c.id] || '';
 export const charLabel = (c) => NAMES[c.id] || `${c.role} No.${c.id.split('-')[1]}`;
@@ -78,25 +82,46 @@ export function pull(count, state) {
     state.pity = (state.pity || 0) + 1;
     let rar = rollRarity(count === 10 && i === 9);
     if (state.pity >= PITY) rar = 'SSR';
-    if (rar === 'SSR') state.pity = 0;
+    if (rar === 'SSR') {
+      const forced = state.pity >= PITY;
+      state.pity = 0;
+      // 天井ならナベブギョウ確定。ふだんはSSRの半分がナベブギョウ
+      if (forced || Math.random() < PICKUP_RATE / RATES.SSR) { out.push(GACHA_POOL.find(c => c.id === PICKUP)); continue; }
+      const pool = GACHA_POOL.filter(c => c.rarity === 'SSR' && c.id !== PICKUP);
+      out.push(pool[Math.floor(Math.random() * pool.length)]); continue;
+    }
     const pool = GACHA_POOL.filter(c => c.rarity === rar);
     out.push(pool[Math.floor(Math.random() * pool.length)]);
   }
   return out;
 }
 
+// 馬の能力と騎手の能力の対応（どちらの育成でも効くように読みかえる）
+const H2J = { spd: 'tec', sta: 'fit', pow: 'whip', gut: 'bal', wis: 'jud' }, J2H = Object.fromEntries(Object.entries(H2J).map(([a, b]) => [b, a]));
+const mapK = (k, kind) => kind === 'jockey' ? (H2J[k] || k) : (J2H[k] || k);
 // 編成（各3枠）の効果をまとめる
-export function deckFx(kind, deck, ownedList) {
+export function deckFx(kind, deck, ownedList, selfId) {
   const owned = {}; for (const id of ownedList || []) owned[id] = (owned[id] || 0) + 1;
   const out = { train: {}, start: {}, inj: 0, ev: 0, money: 0, cond: 0, sta: 0, ids: [] };
-  for (const id of deck || []) {
+  const list = [...new Set([...(deck || []), ...(selfId ? [selfId] : [])])];
+  for (const id of list) {
     const c = GACHA_POOL.find(x => x.id === id); if (!c || !owned[id]) continue;
-    if (c.kind !== 'both' && c.kind !== kind) continue;
-    const m = mult(lvOf(owned, id)); out.ids.push(id);
-    for (const [k, v] of Object.entries(c.fx.train || {})) out.train[k] = (out.train[k] || 0) + v * m;
-    for (const [k, v] of Object.entries(c.fx.start || {})) out.start[k] = (out.start[k] || 0) + v * m;
+    const self = id === selfId;
+    if (!self && c.kind !== 'both' && c.kind !== kind) continue;
+    const m = mult(lvOf(owned, id)) * (self ? 1.5 : 1); out.ids.push(id);
+    for (const [k, v] of Object.entries(c.fx.train || {})) { const k2 = mapK(k, kind); out.train[k2] = (out.train[k2] || 0) + v * m; }
+    for (const [k, v] of Object.entries(c.fx.start || {})) { const k2 = mapK(k, kind); out.start[k2] = (out.start[k2] || 0) + v * m; }
     for (const k of ['inj', 'ev', 'money', 'cond', 'sta']) out[k] += (c.fx[k] || 0) * m;
   }
   out.inj = Math.min(0.6, out.inj); out.ev = Math.min(0.15, out.ev);
   return out;
+}
+
+// ===== ガチャキャラを騎手として育てる =====
+// レア度と凸で素質が上がる。キャラ自身の効果は1.5倍で、ずっと自分に効く
+export const CHAR_POT = { SSR: [86, 90], SR: [83, 87], R: [80, 84] };
+export function charJockeyOpts(c, ownedList) {
+  const owned = {}; for (const id of ownedList || []) owned[id] = (owned[id] || 0) + 1;
+  const lv = lvOf(owned, c.id), [lo, hi] = CHAR_POT[c.rarity];
+  return { name: charLabel(c), pot: Math.min(95, lo + Math.floor(Math.random() * (hi - lo + 1)) + lv), bonus: c.rarity === 'SSR' ? 6 : c.rarity === 'SR' ? 3 : 1 };
 }

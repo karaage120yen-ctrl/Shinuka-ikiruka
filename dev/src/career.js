@@ -206,7 +206,7 @@ export function makeHorse(d = {}) {
 export function makeJockey(d = {}) {
   const legend = d.forceLegend || Math.random() < 0.00001;
   const monster = !legend && (d.forceMonster || Math.random() < 0.02);
-  const pot = legend ? 99 : monster ? ri(87, 91) : clamp(Math.round(80 + gauss() * 3.6), 70, 87);
+  const pot = d.pot || (legend ? 99 : monster ? ri(87, 91) : clamp(Math.round(80 + gauss() * 3.6), 70, 87));
   const st = {}, cap = {};
   for (const k of J_KEYS) { cap[k] = clamp(Math.round(pot - 4 + rnd(-6, 5)), 40, 99); st[k] = Math.round(rnd(16, 26) + (monster ? 3 : legend ? 8 : 0)); }
   return {

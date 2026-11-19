@@ -1,7 +1,7 @@
 // ===== ガチャ画面（引く・コレクション・編成） =====
 import { S, save } from './store.js';
 import { render, bind, toast, header, modal, esc } from './uikit.js';
-import { pull, COST_1, COST_10, GACHA_POOL, RATES, PITY, charLabel, cardName, fxText, lvOf, KIND_N } from './gacha.js';
+import { pull, COST_1, COST_10, GACHA_POOL, RATES, PITY, PICKUP, PICKUP_RATE, charLabel, cardName, fxText, lvOf, KIND_N } from './gacha.js';
 import { mission } from './mission.js';
 import * as A from './audio.js';
 
@@ -20,8 +20,10 @@ function draw() {
   const tabs = `<div class="tabs">${[['pull', '引く'], ['col', 'コレクション'], ['deck', '編成']].map(([k, n]) => `<button class="tab ${tab === k ? 'on' : ''}" data-act="tab" data-v="${k}">${n}</button>`).join('')}</div>`;
   let body = '';
   if (tab === 'pull') {
-    body = `<div class="banner"><div class="bn-tag">SUPPORT</div><div class="bn-title">サポートガチャ</div><div class="bn-sub">育成を助けるキャラ ${GACHA_POOL.length}人</div></div>
-    <div class="rates">SSR ${RATES.SSR * 100}%　SR ${RATES.SR * 100}%　R ${RATES.R * 100}%　（10連はSR以上1枚確定）<br>天井：あと <b>${PITY - (S.gachaPity || 0)}</b> 回でSSR確定</div>
+    const pk = GACHA_POOL.find(c => c.id === PICKUP);
+    body = `<div class="banner pickup"><canvas id="nabe" width="160" height="160"></canvas><div class="bn-info"><div class="bn-tag">PICK UP</div><div class="bn-title">ナベブギョウ</div><div class="bn-sub">SSR・${esc(pk.role)}　期間なし</div>
+      <div class="bn-fx">${fxText(pk.fx).join('<br>')}</div></div></div>
+    <div class="rates">SSR ${RATES.SSR * 100}%（うちナベブギョウ ${PICKUP_RATE * 100}%）　SR ${RATES.SR * 100}%　R ${RATES.R * 100}%<br>10連はSR以上1枚確定　天井：あと <b>${PITY - (S.gachaPity || 0)}</b> 回でナベブギョウ確定</div>
     <div class="row2"><button class="btn primary" data-act="p1">1回引く<small>🥕${COST_1}</small></button><button class="btn race" data-act="p10">10連<small>🥕${COST_10}</small></button></div>
     <p class="note">同じキャラが出ると「凸」が上がって効果が強くなる（◆1つで+25%、最大◆◆◆◆で2倍）。引いたキャラは「編成」で育成に連れていく。</p>`;
   } else if (tab === 'col') {
@@ -38,6 +40,7 @@ function draw() {
     ${can.length ? `<div class="cgrid">${can.map(c => card(c, owned, { act: 'add', on: d.includes(c.id) })).join('')}</div>` : '<p class="note">まだいない。ガチャを引こう。</p>'}`;
   }
   render(`${header('ガチャ')}<div class="page gacha-page">${tabs}${body}</div>`, true);
+  const cv = document.getElementById('nabe'); if (cv) drawNabe(cv);
   const doPull = (n, cost) => {
     if (S.carrots < cost) { toast('金のにんじんが足りません'); return; }
     S.carrots -= cost;
@@ -54,7 +57,7 @@ function draw() {
     const c = GACHA_POOL.find(x => x.id === id), n = owned[id] || 0;
     if (!n) { toast('まだ持っていない'); return; }
     modal(`<h2><span class="r-${c.rarity}">${c.rarity}</span> ${esc(charLabel(c))}</h2><p class="small">${esc(c.role)}・${KIND_N[c.kind]}で効く・持っている数 ${n}（${lvOf(owned, id)}凸）</p>
-      <ul class="fx">${fxText(c.fx, lvOf(owned, id)).map(t => `<li>${t}</li>`).join('')}</ul><p class="muted small">名前と絵はあとで入る予定</p><button class="btn primary wide" data-close>閉じる</button>`);
+      <ul class="fx">${fxText(c.fx, lvOf(owned, id)).map(t => `<li>${t}</li>`).join('')}</ul><p class="small">🏇 騎手の育成で「ガチャキャラを騎手として育てる」を選ぶと、このキャラ自身を育てられる。</p><button class="btn primary wide" data-close>閉じる</button>`);
   };
   bind({
     go: () => back(), tab: (v) => { tab = v; draw(); }, dk: (v) => { deckKind = v; draw(); },
@@ -62,4 +65,34 @@ function draw() {
     add: (id) => { const d = S.deck[deckKind]; if (d.includes(id)) { d.splice(d.indexOf(id), 1); } else { if (d.length >= 3) { toast('3人まで'); return; } d.push(id); } save(); draw(); },
     rm: (id) => { const d = S.deck[deckKind]; d.splice(d.indexOf(id), 1); save(); draw(); },
   });
+}
+
+// ナベブギョウの絵（ドット絵）：ちょんまげの奉行が、湯気の立つ鍋をおたまで仕切っている
+export function drawNabe(cv) {
+  const x = cv.getContext('2d'), P = 5; x.imageSmoothingEnabled = false;
+  x.clearRect(0, 0, cv.width, cv.height);
+  const px = (c, a, b, w = 1, h = 1) => { x.fillStyle = c; x.fillRect(a * P, b * P, w * P, h * P); };
+  // 後光
+  const g = x.createRadialGradient(80, 70, 10, 80, 70, 80); g.addColorStop(0, 'rgba(255,220,120,.55)'); g.addColorStop(1, 'rgba(255,220,120,0)'); x.fillStyle = g; x.fillRect(0, 0, 160, 160);
+  // ちょんまげ
+  px('#1a1a1a', 15, 2, 2, 1); px('#1a1a1a', 14, 3, 4, 1);
+  // 頭・顔
+  px('#2b2b2b', 11, 4, 10, 2); px('#f1c9a5', 11, 6, 10, 6); px('#e2b48c', 11, 11, 10, 1);
+  px('#1a1a1a', 13, 8, 2, 1); px('#1a1a1a', 17, 8, 2, 1);          // まゆ（きりっと）
+  px('#111', 13, 9, 1, 1); px('#111', 18, 9, 1, 1);                 // 目
+  px('#c0392b', 15, 10, 2, 1);                                       // 口
+  px('#f7a8a0', 12, 10, 1, 1); px('#f7a8a0', 19, 10, 1, 1);          // ほっぺ
+  // 裃（かみしも）
+  px('#2c3e7a', 7, 12, 18, 3); px('#2c3e7a', 9, 15, 14, 8); px('#f4f1ea', 14, 12, 4, 6); px('#e8c547', 15, 14, 2, 1);
+  px('#1f2d5a', 7, 12, 2, 1); px('#1f2d5a', 23, 12, 2, 1);
+  // 腕とおたま
+  px('#2c3e7a', 23, 15, 3, 3); px('#f1c9a5', 25, 17, 2, 2); px('#8a6a3a', 26, 13, 1, 6); px('#c9c9c9', 25, 19, 3, 2);
+  px('#2c3e7a', 6, 15, 3, 3); px('#f1c9a5', 6, 18, 2, 2);
+  // 鍋（土鍋）
+  px('#5a3a22', 7, 22, 18, 1); px('#7a4a2a', 6, 23, 20, 5); px('#5a3a22', 7, 28, 18, 1); px('#3a2414', 5, 24, 1, 2); px('#3a2414', 26, 24, 1, 2);
+  // 具（ねぎ・白菜・豆腐・にんじん）
+  px('#f4f1ea', 8, 22, 3, 1); px('#7ab04a', 12, 21, 4, 1); px('#ff8a3d', 17, 21, 2, 1); px('#f4f1ea', 20, 22, 3, 1); px('#d84a3a', 22, 21, 1, 1);
+  // 湯気
+  x.fillStyle = 'rgba(255,255,255,.75)';
+  for (const [a, b] of [[10, 18], [15, 16], [20, 18]]) { x.fillRect(a * P, b * P, P, P * 2); x.fillRect((a + 1) * P, (b - 2) * P, P, P * 2); }
 }

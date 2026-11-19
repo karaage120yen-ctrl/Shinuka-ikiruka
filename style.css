@@ -465,3 +465,7 @@ input[type=range] { accent-color: var(--gold); width: 46%; }
 .gres .ccard .cn { font-size: 10px; }
 #race-screen.replaying .hud-msg, #race-screen.replaying .hud-top3 { display: none; }
 .pre-card { max-height: 52vh; }
+
+.banner.pickup { display: flex; gap: 10px; align-items: center; text-align: left; padding: 14px; background: linear-gradient(135deg, #7a1f12, #c8541e 55%, #e8a33a); }
+.banner.pickup canvas { width: 120px; height: 120px; flex: none; image-rendering: pixelated; background: rgba(0,0,0,.18); border-radius: 14px; }
+.bn-info .bn-title { font-size: 26px; } .bn-fx { margin-top: 6px; font-size: 11px; line-height: 1.45; background: rgba(0,0,0,.25); border-radius: 8px; padding: 5px 7px; }

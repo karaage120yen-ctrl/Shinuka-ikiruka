@@ -1,5 +1,5 @@
-const CACHE = 'shinuka-202611190927';
-const FILES = ['./', './index.html', './app.js?v=202611190927', './style.css?v=202611190927', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-180.png', './title.jpg?v=2'];
+const CACHE = 'shinuka-202611191035';
+const FILES = ['./', './index.html', './app.js?v=202611191035', './style.css?v=202611191035', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-180.png', './title.jpg?v=2'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener('fetch', (e) => {
