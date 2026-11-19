@@ -22,7 +22,20 @@ function cylDir(r1, r2, len, start, ang, seg = 10) {
 }
 
 // 断面をつないでなめらかな形を作る（rT=上/前側、rB=下/後ろ側、rz=横幅）
-function loft(secs, N = 18) {
+function smoothSecs(secs, k = 3) {
+  if (secs.length < 3) return secs;
+  const out = [], M = secs.length, at = (i) => secs[Math.max(0, Math.min(M - 1, i))];
+  const cr = (a, b, c, d, t) => 0.5 * ((2 * b) + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t * t + (-a + 3 * b - 3 * c + d) * t * t * t);
+  for (let i = 0; i < M - 1; i++) for (let j = 0; j < k; j++) {
+    const t = j / k, A = at(i - 1), B = at(i), C = at(i + 1), D = at(i + 2);
+    out.push({ c: V(cr(A.c.x, B.c.x, C.c.x, D.c.x, t), cr(A.c.y, B.c.y, C.c.y, D.c.y, t), cr(A.c.z, B.c.z, C.c.z, D.c.z, t)),
+      rT: Math.max(0.005, cr(A.rT, B.rT, C.rT, D.rT, t)), rB: Math.max(0.005, cr(A.rB, B.rB, C.rB, D.rB, t)), rz: Math.max(0.005, cr(A.rz, B.rz, C.rz, D.rz, t)) });
+  }
+  out.push(secs[M - 1]);
+  return out;
+}
+function loft(secs0, N = 28) {
+  const secs = smoothSecs(secs0);
   const pos = [], uv = [], idx = [];
   const M = secs.length;
   for (let i = 0; i < M; i++) {
@@ -52,10 +65,11 @@ function loft(secs, N = 18) {
   return geo;
 }
 const sec = (x, y, rT, rB, rz, z = 0) => ({ c: V(x, y, z), rT, rB, rz });
-const LEGK = 1.42; // 脚を太めに（かわいい体形）
+const LEGK = 1.6; // 脚を太めに（かわいい体形）
 function legLoft(rows) { return loft(rows.map(([y, f, b, w, x = 0]) => ({ c: V(x, y, 0), rT: f * LEGK, rB: b * LEGK, rz: w * LEGK })), 14); }
 
 const geoCache = {};
+const HEAD_S = 1.5, HEAD_K = V(0.74, 1.18, 1.2); // 頭：大きく・短く・まるく
 const NI = (x) => x.index ? x.toNonIndexed() : x;
 function horseGeos() {
   if (geoCache.h) return geoCache.h;
@@ -65,8 +79,8 @@ function horseGeos() {
     sec(0.55, 1.3, 0.46, 0.47, 0.37), sec(0.3, 1.31, 0.44, 0.47, 0.4), sec(0.02, 1.31, 0.42, 0.44, 0.41),
     sec(-0.28, 1.33, 0.41, 0.36, 0.39), sec(-0.52, 1.36, 0.43, 0.38, 0.38), sec(-0.76, 1.35, 0.4, 0.38, 0.34),
     sec(-0.93, 1.31, 0.3, 0.3, 0.25), sec(-1.02, 1.28, 0.12, 0.14, 0.1),
-  ], 24);
-  body.scale(0.94, 1.1, 1.22);
+  ], 32);
+  body.scale(0.88, 1.13, 1.26);
   // 首と頭（首の付け根が原点）
   const alpha = 0.5, beta = -0.82;
   const E = V(Math.cos(alpha) * 0.95, Math.sin(alpha) * 0.95, 0);
@@ -83,17 +97,19 @@ function horseGeos() {
   // まんまるの目（白目・黒目・光）
   const eyeAt = (side) => hd(0.1).add(V(Math.cos(beta + Math.PI / 2) * 0.07, Math.sin(beta + Math.PI / 2) * 0.07, side * 0.1));
   const eyeW = rel(mergeGeometries([1, -1].map(sd => NI(g(new THREE.SphereGeometry(0.066, 16, 12), eyeAt(sd), 0, V(1, 1.1, 0.62))))));
-  const eyeB = rel(mergeGeometries([1, -1].map(sd => NI(g(new THREE.SphereGeometry(0.046, 12, 10), eyeAt(sd).add(V(0.02, -0.004, sd * 0.024)), 0, V(1, 1.15, 0.62))))));
-  const eyeH = rel(mergeGeometries([1, -1].map(sd => NI(g(new THREE.SphereGeometry(0.014, 6, 5), eyeAt(sd).add(V(0.04, 0.024, sd * 0.042)))))));
+  const eyeB = rel(mergeGeometries([1, -1].map(sd => NI(g(new THREE.SphereGeometry(0.052, 14, 10), eyeAt(sd).add(V(0.018, -0.006, sd * 0.024)), 0, V(1, 1.18, 0.62))))));
+  const eyeH = rel(mergeGeometries([1, -1].flatMap(sd => [NI(g(new THREE.SphereGeometry(0.017, 8, 6), eyeAt(sd).add(V(0.036, 0.026, sd * 0.044)))), NI(g(new THREE.SphereGeometry(0.008, 6, 5), eyeAt(sd).add(V(0.012, -0.024, sd * 0.05))))])));
+  // ほっぺ（うすいピンク）
+  const blush = rel(mergeGeometries([1, -1].map(sd => NI(g(new THREE.SphereGeometry(0.055, 14, 10), hd(0.24).add(V(-0.03, -0.045, sd * 0.1)), 0, V(1.15, 0.8, 0.28))))));
   // 覆面（メンコ）：頭の上半分を包む布と、目のまわりのカップ
   const hood = rel(mergeGeometries([
     NI(loft([hs(-0.12, 0.16, 0.175, 0.13), hs(0.06, 0.15, 0.22, 0.138), hs(0.22, 0.123, 0.14, 0.113), hs(0.34, 0.1, 0.105, 0.094)], 20)),
     ...[1, -1].map(sd => NI(g(new THREE.TorusGeometry(0.074, 0.022, 8, 18), eyeAt(sd).add(V(0, 0, sd * 0.004)), 0, V(1, 1.08, 1), 0, sd * 0.35))),
   ]));
-  const ears = rel(mergeGeometries([
-    g(new THREE.ConeGeometry(0.045, 0.17, 10), E.clone().add(V(-0.04, 0.17, 0.07)), -0.25, V(1, 1, 0.75), 0.18),
-    g(new THREE.ConeGeometry(0.045, 0.17, 10), E.clone().add(V(-0.04, 0.17, -0.07)), -0.25, V(1, 1, 0.75), -0.18),
-  ].map(NI)));
+  // まるい葉っぱ形の耳（内側はピンク）
+  const earAt = (sd) => E.clone().add(V(-0.03, 0.2, sd * 0.085));
+  const ears = rel(mergeGeometries([1, -1].map(sd => NI(g(new THREE.SphereGeometry(0.052, 14, 10), earAt(sd), -0.2, V(0.72, 1.65, 0.55), sd * 0.32)))));
+  const earIn = rel(mergeGeometries([1, -1].map(sd => NI(g(new THREE.SphereGeometry(0.035, 12, 8), earAt(sd).add(V(0.02, 0.0, 0)), -0.2, V(0.45, 1.45, 0.4), sd * 0.32)))));
   // たてがみ：首すじに沿って垂れる毛の帯（毛すじの画像を貼る）
   const mp = [], mu = [], mi = [];
   const NM = 16;
@@ -113,11 +129,11 @@ function horseGeos() {
   for (let i = 0; i < 9; i++) {
     const t = 0.0 + i * 0.105;
     const cx = Math.cos(alpha) * t - Math.sin(alpha) * (0.3 - t * 0.12) - 0.04, cy = Math.sin(alpha) * t + Math.cos(alpha) * (0.3 - t * 0.12);
-    const c = new THREE.ConeGeometry(0.075 - i * 0.003, 0.2, 7); c.rotateZ(0.9 - alpha * 0.3); c.scale(1, 1, 0.7); c.translate(cx - 0.02, cy + 0.03, 0.02 * ((i % 2) * 2 - 1));
+    const c = new THREE.SphereGeometry(0.075 - i * 0.003, 10, 8); c.scale(1.5, 0.75, 0.6); c.rotateZ(0.6 - alpha * 0.4); c.translate(cx - 0.03, cy + 0.0, 0.025 * ((i % 2) * 2 - 1));
     tufts.push(NI(c));
   }
   const mane = mergeGeometries([NI(maneG), ...tufts]);
-  const ft = [-1, 0, 1].map(k => { const c = new THREE.ConeGeometry(0.05, 0.16, 7); c.rotateZ(-1.2 + k * 0.15); c.translate(E.x + 0.07, E.y + 0.11, k * 0.04); return NI(c); });
+  const ft = [-1, 0, 1].map(k => { const c = new THREE.SphereGeometry(0.05, 10, 8); c.scale(1.6, 0.8, 0.8); c.rotateZ(-0.9 + k * 0.2); c.translate(E.x + 0.07, E.y + 0.12, k * 0.045); return NI(c); });
   const fore = rel(mergeGeometries([NI(forelock), ...ft]));
   const eyes = rel(mergeGeometries([
     g(new THREE.SphereGeometry(0.024, 6, 5), hd(0.62).add(V(0.03, -0.02, 0.055))),  // 鼻の穴
@@ -133,7 +149,7 @@ function horseGeos() {
   const upperF = legLoft([[0.04, 0.12, 0.11, 0.1], [-0.12, 0.11, 0.1, 0.085], [-0.3, 0.07, 0.072, 0.06], [-0.43, 0.052, 0.06, 0.05], [-0.48, 0.065, 0.07, 0.064], [-0.53, 0.05, 0.05, 0.048]]);
   const lowerF = legLoft([[0.02, 0.05, 0.05, 0.045], [-0.15, 0.036, 0.052, 0.035], [-0.32, 0.038, 0.05, 0.038], [-0.39, 0.058, 0.068, 0.056], [-0.43, 0.04, 0.045, 0.04]]);
   const pastF = mergeGeometries([g(new THREE.CylinderGeometry(0.05, 0.055, 0.13, 10), V(0.02, -0.06, 0), 0.25)].map(NI));
-  const hoof = g(new THREE.CylinderGeometry(0.068, 0.088, 0.1, 12), V(0.03, -0.16, 0));
+  const hoof = g(new THREE.SphereGeometry(0.095, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.62), V(0.03, -0.2, 0), 0, V(1.1, 0.9, 1));
   const upperH = legLoft([[0.06, 0.17, 0.2, 0.13], [-0.16, 0.13, 0.16, 0.105], [-0.38, 0.075, 0.09, 0.065], [-0.53, 0.06, 0.1, 0.06, -0.01], [-0.6, 0.05, 0.06, 0.05]]);
   const lowerH = legLoft([[0.02, 0.05, 0.055, 0.045], [-0.18, 0.038, 0.054, 0.036], [-0.37, 0.04, 0.052, 0.04], [-0.44, 0.06, 0.07, 0.057], [-0.48, 0.042, 0.046, 0.042]]);
   const sock = g(new THREE.CylinderGeometry(0.06, 0.066, 0.2, 10), V(0, -0.33, 0));
@@ -152,7 +168,7 @@ function horseGeos() {
     g(new THREE.BoxGeometry(0.16, 0.08, 0.36), V(0.32, 1.72, 0)),
     g(new THREE.TorusGeometry(0.4, 0.025, 6, 20, Math.PI), V(0.1, 1.3, 0), 0, null, 0, Math.PI / 2), // 腹帯
   ].map(NI));
-  geoCache.h = { beta, body, neck, head, muzzle, eyeW, eyeB, eyeH, hood, fore, E, ears, mane, eyes, blaze, bridle, upperF, lowerF, pastF, hoof, upperH, lowerH, sock, tail, saddle, bit, alpha };
+  geoCache.h = { earIn, blush, beta, body, neck, head, muzzle, eyeW, eyeB, eyeH, hood, fore, E, ears, mane, eyes, blaze, bridle, upperF, lowerF, pastF, hoof, upperH, lowerH, sock, tail, saddle, bit, alpha };
   return geoCache.h;
 }
 
@@ -170,7 +186,7 @@ function jockeyGeos() {
   if (geoCache.j) return geoCache.j;
   // 前かがみの胴（背中・肩・胸）
   const torso = mergeGeometries([
-    capX(0.15, 0.3, V(0.24, 0.45, 0), -0.14, V(1, 1, 1.22)),
+    capX(0.17, 0.24, V(0.24, 0.46, 0), -0.14, V(1, 1.05, 1.25)),
     g(new THREE.SphereGeometry(0.1, 12, 8), V(0.42, 0.47, 0.15)),
     g(new THREE.SphereGeometry(0.1, 12, 8), V(0.42, 0.47, -0.15)),
     g(new THREE.SphereGeometry(0.16, 14, 10), V(0.04, 0.4, 0), 0, V(1, 0.9, 1.15)), // 腰
@@ -186,6 +202,7 @@ function jockeyGeos() {
     seg(0.05, 0.05, V(0.5, 0.5, 0), V(0.56, 0.54, 0), 8), // 首
   ].map(NI));
   const face = big(face0);
+  const smile = big(mergeGeometries([g(new THREE.TorusGeometry(0.036, 0.008, 6, 12, Math.PI * 0.8), V(0.7, 0.525, 0), Math.PI * 1.1, null, 0, Math.PI / 2)].map(NI)));
   const goggles = big(mergeGeometries([
     g(new THREE.SphereGeometry(0.045, 12, 8), V(0.685, 0.57, 0.045), 0, V(0.5, 0.85, 1)),
     g(new THREE.SphereGeometry(0.045, 12, 8), V(0.685, 0.57, -0.045), 0, V(0.5, 0.85, 1)),
@@ -209,7 +226,7 @@ function jockeyGeos() {
   }
   const arms = mergeGeometries(armsL.map(NI));
   const gloves = mergeGeometries(gl.map(NI));
-  geoCache.j = { torso, helmet, face, goggles, pants, boots, cuff, arms, gloves };
+  geoCache.j = { smile, torso, helmet, face, goggles, pants, boots, cuff, arms, gloves };
   return geoCache.j;
 }
 
@@ -265,13 +282,15 @@ export function buildHorse(coat, silkColor, num, opts = {}) {
   const neck = new THREE.Mesh(G.neck, coatMat); neckP.add(neck);
   // 頭（少し大きめ・かわいい顔）
   // 頭：短く・幅広く（頭の向きに沿って縮め、横と縦に広げる）
-  const headO = new THREE.Group(); headO.position.copy(G.E); headO.scale.setScalar(1.42); neckP.add(headO);
+  const headO = new THREE.Group(); headO.position.copy(G.E); headO.scale.setScalar(HEAD_S); neckP.add(headO);
   const headR = new THREE.Group(); headR.rotation.z = G.beta; headO.add(headR);
-  const headG = new THREE.Group(); headG.scale.set(0.8, 1.14, 1.16); headR.add(headG);
+  const headG = new THREE.Group(); headG.scale.set(HEAD_K.x, HEAD_K.y, HEAD_K.z); headR.add(headG);
   headG.add(new THREE.Mesh(G.head, coatMat));
   const mz = new THREE.Color(coat.body).multiplyScalar(coat.name === '芦毛' ? 0.55 : 0.62);
   headG.add(new THREE.Mesh(G.muzzle, new THREE.MeshStandardMaterial({ color: mz, roughness: 0.4, map: COAT_MAP })));
   headG.add(new THREE.Mesh(G.ears, coatMat));
+  headG.add(new THREE.Mesh(G.earIn, mat(0xf2a0a8, { roughness: 0.6 })));
+  headG.add(new THREE.Mesh(G.blush, new THREE.MeshStandardMaterial({ color: 0xff7f96, roughness: 0.7, transparent: true, opacity: 0.75, depthWrite: false })));
   headG.add(new THREE.Mesh(G.eyeW, mat(0xffffff, { roughness: 0.15 })));
   headG.add(new THREE.Mesh(G.eyeB, mat(0x0a0604, { roughness: 0.08 })));
   headG.add(new THREE.Mesh(G.eyeH, new THREE.MeshBasicMaterial({ color: 0xffffff })));
@@ -302,7 +321,7 @@ export function buildHorse(coat, silkColor, num, opts = {}) {
   mk(-0.66, 1.2, -0.17, false, 0.1, 8);
   if (opts.blaze ?? Math.random() < 0.35) headG.add(new THREE.Mesh(G.blaze, new THREE.MeshStandardMaterial({ color: 0xf4f1ea, roughness: 0.6, side: THREE.DoubleSide })));
   // しっぽ
-  const tailP = new THREE.Group(); tailP.position.set(-1.08, 1.45, 0); bodyG.add(tailP);
+  const tailP = new THREE.Group(); tailP.position.set(-0.86, 1.5, 0); bodyG.add(tailP);
   tailP.add(new THREE.Mesh(G.tail, new THREE.MeshStandardMaterial({ color: coat.mane, map: MANE_MAP, alphaTest: 0.3, side: THREE.DoubleSide, roughness: 0.7 })));
   // 騎手
   const J = jockeyGeos();
@@ -312,6 +331,7 @@ export function buildHorse(coat, silkColor, num, opts = {}) {
   const helmet = new THREE.Mesh(J.helmet, opts.cap ? mat(new THREE.Color(opts.cap).getHex(), { roughness: 0.25 }) : silk); jock.add(helmet);
   const face = new THREE.Mesh(J.face, mat(0xd9a982, { roughness: 0.7 })); jock.add(face);
   const gog = new THREE.Mesh(J.goggles, mat(0x101418, { roughness: 0.1, metalness: 0.6 })); jock.add(gog);
+  jock.add(new THREE.Mesh(J.smile, mat(0x5a2a1a)));
   const pants = new THREE.Mesh(J.pants, mat(0xf4f4f0, { roughness: 0.6 })); jock.add(pants);
   const boots = new THREE.Mesh(J.boots, mat(0x111111, { roughness: 0.25 })); jock.add(boots);
   jock.add(new THREE.Mesh(J.cuff, mat(0xb07a45, { roughness: 0.5 })));
@@ -321,7 +341,7 @@ export function buildHorse(coat, silkColor, num, opts = {}) {
   const bri = mat([0xf0efe8, 0xf2c200, 0xe02828, 0x1d4ed8, 0x5a3a20][Math.floor(Math.random() * 5)], { roughness: 0.45 });
   headG.add(new THREE.Mesh(G.bridle, bri));
   root.traverse(o => { if (o.isMesh) { o.castShadow = !!opts.shadow; } });
-  const H = { root, bodyG, neckP, mane, legs, tailP, jock, torso, helmet, face, pants, boots, arms, silk, gog, gloves, bit: G.bit.clone().multiply(V(0.8, 1.14, 1.16)).applyAxisAngle(V(0, 0, 1), G.beta).multiplyScalar(1.42).add(G.E), headG, phase: 0, coatMat, coatBase: coatMat.color.clone() };
+  const H = { root, bodyG, neckP, mane, legs, tailP, jock, torso, helmet, face, pants, boots, arms, silk, gog, gloves, bit: G.bit.clone().multiply(HEAD_K).applyAxisAngle(V(0, 0, 1), G.beta).multiplyScalar(HEAD_S).add(G.E), headG, phase: 0, coatMat, coatBase: coatMat.color.clone() };
   return H;
 }
 

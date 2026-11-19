@@ -376,7 +376,7 @@ table.ped td { border: 1px solid var(--line); padding: 6px; } table.ped td b { f
 .pitem.ach.cur { box-shadow: inset 0 0 0 2px var(--gold); }
 
 /* 新タイトル画面 */
-.title-bg { background: url(title.jpg?v=3) center 30%/cover no-repeat, #0b1a14; }
+.title-bg { background: url(title.jpg?v=5) center 30%/cover no-repeat, #0b1a14; }
 .title-bg::after { height: 100%; background: linear-gradient(180deg, rgba(8,4,2,.55) 0%, rgba(8,4,2,.1) 30%, rgba(8,10,8,.55) 52%, rgba(6,12,9,.92) 70%, #0b1a14 100%); }
 .title-screen .logo { margin: 26px 0 14px; animation: logoIn .9s cubic-bezier(.2,1.4,.4,1) both; }
 .title-screen .logo-main { font-size: 54px; }
@@ -499,3 +499,6 @@ input[type=range] { accent-color: var(--gold); width: 46%; }
 .title-screen .home-carrot { align-self: center; }
 .title-screen .logo-main { font-size: 44px; line-height: 1.05; }
 .title-screen .logo { margin-top: 8px; }
+
+.title-bg { height: calc(100vw * 1.944) !important; }
+.title-screen .menu { margin-top: calc(100vw * 1.25); }
