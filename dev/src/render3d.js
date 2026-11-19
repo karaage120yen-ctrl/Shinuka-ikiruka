@@ -52,7 +52,7 @@ function skyMesh(sunDir, sky) {
         return mix(mix(h21(i), h21(i+vec2(1,0)), f.x), mix(h21(i+vec2(0,1)), h21(i+vec2(1,1)), f.x), f.y); }
       float fbm(vec2 p){ float v = 0.0, a = 0.5; for (int i = 0; i < 5; i++) { v += a*vn(p); p = p*2.03 + vec2(1.7, 9.2); a *= 0.5; } return v; }
       void main(){ float h = clamp(vDir.y, -0.1, 1.0);
-        vec3 zen = vec3(0.16,0.38,0.78); vec3 hor = vec3(0.74,0.84,0.93);
+        vec3 zen = vec3(0.08,0.36,0.86); vec3 hor = vec3(0.62,0.82,0.98);
         vec3 c = mix(hor, zen, pow(max(h,0.0), 0.55));
         float s = max(dot(normalize(vDir), sunDir), 0.0);
         c += vec3(1.0,0.9,0.7) * (pow(s, 400.0)*4.0 + pow(s, 12.0)*0.25) * (1.0 - cloud);
@@ -96,13 +96,13 @@ export class RaceView {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, lowPower ? 1 : 1.6));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.toneMappingExposure = 1.16;
     this.renderer.shadowMap.enabled = !lowPower;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.scene = new THREE.Scene();
     const w = race.weather || '晴', night = TRACK.stand === 'night';
     this.night = night; this.wx = w;
-    const fogC = night ? 0x0b1020 : w === '雨' ? 0x8f969e : w === '小雨' || w === '曇' ? 0xa9b2bb : w === '雪' ? 0xd5dbe2 : 0xb9cde0;
+    const fogC = night ? 0x0b1020 : w === '雨' ? 0x8f969e : w === '小雨' || w === '曇' ? 0xa9b2bb : w === '雪' ? 0xd5dbe2 : 0xa8d0f0;
     this.scene.fog = new THREE.Fog(fogC, night ? 80 : 100, w === '雨' || w === '雪' ? 700 : 1500);
     this.camera = new THREE.PerspectiveCamera(72, 1, 0.05, 6000);
     this.camera.rotation.order = 'YXZ';
@@ -141,7 +141,7 @@ export class RaceView {
       this.envRT = pm.fromScene(envS, 0.02, 0.1, 500); pm.dispose();
       S.environment = this.envRT.texture; S.environmentIntensity = night ? 0.35 : 0.55;
     } catch (e) { console.warn(e); }
-    const hemiI = night ? 0.16 : 0.5 - cloudy * 0.1;
+    const hemiI = night ? 0.16 : 0.62 - cloudy * 0.12;
     S.add(new THREE.HemisphereLight(night ? 0x8090c0 : 0xd6e8ff, 0x52602f, hemiI));
     const sun = new THREE.DirectionalLight(night ? 0xdfe6ff : 0xfff0d8, night ? 0.9 : 2.6 * (1 - cloudy * 0.6));
     sun.castShadow = true;
@@ -391,13 +391,32 @@ export class RaceView {
       post.position.set(p.x, gy + 1.2, p.z); post.rotation.y = ang; g.add(post);
     }
     const a = trackPos(race.u0 + 1.6, 0.5, {}), b = trackPos(race.u0 + 1.6, 0.5 + n * 1.25, {});
-    const beam = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.6, n * 1.25 + 0.4), grey);
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.6, n * 1.25 + 0.4), green);
     beam.position.set((a.x + b.x) / 2, gy + 2.7, (a.z + b.z) / 2); beam.rotation.y = ang; g.add(beam);
-    const tt = textTex('死ぬか生きるかの戦い', { w: 1024, h: 96, bg: '#2f7a3a', fg: '#ffffff', size: 60 });
-    const label = new THREE.Mesh(new THREE.PlaneGeometry(n * 1.25, 0.5), new THREE.MeshBasicMaterial({ map: tt, side: THREE.DoubleSide }));
-    label.position.set((a.x + b.x) / 2, gy + 2.7, (a.z + b.z) / 2); label.rotation.y = ang - Math.PI / 2;
-    label.position.x -= Math.cos(ang) * 0.27; label.position.z += Math.sin(ang) * 0.27;
-    g.add(label);
+    // 前に向けて板を置く（ゲートの正面側）
+    const front = (mesh, d, y, off = 0.27, both = true) => {
+      // 前と後ろの両方に置く（正面からも騎手視点からも読めるように）
+      for (const sd of both ? [1, -1] : [1]) {
+        const m2 = sd === 1 ? mesh : mesh.clone();
+        const q = trackPos(race.u0 + 1.6, d, {});
+        m2.position.set(q.x + sd * Math.cos(ang) * off, gy + y, q.z - sd * Math.sin(ang) * off);
+        m2.rotation.y = ang + (sd === 1 ? Math.PI / 2 : -Math.PI / 2);
+        if (m2.material && m2.material.side === THREE.DoubleSide) m2.material = m2.material.clone(), m2.material.side = THREE.FrontSide;
+        g.add(m2);
+      }
+    };
+    // 黄色い馬番の板
+    for (let i = 0; i < n; i++) {
+      const num = race.racers.slice().sort((x, y) => x.gate - y.gate)[i]?.num ?? i + 1;
+      const pt = textTex(String(i + 1), { w: 128, h: 128, bg: '#f5c800', fg: '#111111', size: 92 });
+      front(new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.5), new THREE.MeshBasicMaterial({ map: pt, side: THREE.DoubleSide })), 0.5 + (i + 0.5) * 1.25, 2.7);
+    }
+    // 赤い横断幕（レース名）
+    const title = this.opts.title || '死ぬか生きるかの戦い';
+    const bt = textTex(title, { w: 1024, h: 128, bg: '#c4161c', fg: '#ffe9a8', size: 80 });
+    const bw = Math.min(n * 1.25 * 0.8, 9);
+    front(new THREE.Mesh(new THREE.PlaneGeometry(bw, 0.75), new THREE.MeshBasicMaterial({ map: bt, side: THREE.DoubleSide })), 0.5 + n * 1.25 / 2, 3.45, 0.2, false);
+    for (const e of [-1, 1]) { const q = trackPos(race.u0 + 1.6, 0.5 + n * 1.25 / 2 + e * bw / 2, {}); const pole = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.9, 0.08), grey); pole.position.set(q.x, gy + 3.25, q.z); g.add(pole); }
     this.scene.add(g); this.gate = g;
   }
 
@@ -533,6 +552,7 @@ export class RaceView {
       H.root.position.set(p.x, p.y || 0, p.z);
       H.root.rotation.y = ang + H.yaw;
       if (r.fallen && H.jock.visible) { H.jock.visible = false; }
+      if (H.coatMat) { const gl = r.godT > 0 ? Math.min(1, r.godT) : 0; if (gl || H._gl) { H.coatMat.emissive.setRGB(0.9 * gl, 0.65 * gl, 0.1 * gl); H._gl = gl; } }
       const ph = animateHorse(H, r.stride, r.v, this.t);
       // 蹄の跡（土や芝が飛ぶ）
       if (r.v > 8) {
@@ -614,6 +634,11 @@ export class RaceView {
           camPos.set(p.x + Math.cos(a) * 6.5, (p.y || 0) + 3.2, p.z + Math.sin(a) * 6.5);
           target = new THREE.Vector3(p.x, (p.y || 0) - 0.6, p.z);
           this.camera.position.copy(camPos); this.camera.lookAt(target);
+        } else if (this.view === 'front') {
+          const q = trackPos(r.u + 9, r.d + 1.5, {});
+          camPos.set(q.x, (q.y || 0) + 2.1, q.z);
+          target = new THREE.Vector3(p.x, (p.y || 0) + 1.5, p.z);
+          this.camera.position.copy(camPos); this.camera.lookAt(target);
         } else if (this.view === 'goal') {
           const q = trackPos(TRACK.finishU, W + 4.2, {}), f = trackPos(TRACK.finishU, W * 0.35, {});
           camPos.set(q.x, (q.y || 0) + 2.9, q.z);
@@ -627,7 +652,7 @@ export class RaceView {
           camPos.set(p.x - p.hx * back + p.nx * 1.5, (p.y || 0) + 4.2, p.z - p.hz * back + p.nz * 1.5);
           target = new THREE.Vector3(p.x + p.hx * 8, (p.y || 0) + 1.4, p.z + p.hz * 8);
         }
-        if (this.view !== 'orbit' && this.view !== 'goal') { this.camera.position.lerp(camPos, 1 - Math.exp(-dt * 10)); this.camera.lookAt(target); }
+        if (this.view !== 'orbit' && this.view !== 'goal' && this.view !== 'front') { this.camera.position.lerp(camPos, 1 - Math.exp(-dt * 10)); this.camera.lookAt(target); }
         const wf = this.view === 'goal' ? 22 : (this.camera.aspect < 1 ? 90 : 66) - (this.view === 'fp' ? 0 : 6);
         if (Math.abs(this.camera.fov - wf) > 0.1) { this.camera.fov = wf; this.camera.updateProjectionMatrix(); }
       }

@@ -199,6 +199,7 @@ function drawCharPick() {
     if (a === 'cpick') {
       const c = GACHA_POOL.find(x => x.id === v), o = charJockeyOpts(c, S.gacha);
       const p = HK ? K.makeHorse({ name: o.name, coat: c.coat, style: c.style }) : K.makeJockey({ name: o.name, pot: o.pot });
+      if (c.skill && !p.skills.includes(c.skill)) p.skills.push(c.skill);
       if (HK) { p.pot = o.pot; for (const k in p.cap) p.cap[k] = Math.max(p.cap[k], Math.min(99, o.pot - 4 + Math.round(Math.random() * 8 - 4))); }
       for (const k in p.st) p.st[k] += o.bonus;
       p.flags.potEst = K.potGrade(o.pot);

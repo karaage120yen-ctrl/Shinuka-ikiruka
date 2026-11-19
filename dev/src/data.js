@@ -17,12 +17,12 @@ export const APT_FACTOR = { G: 0.9, F: 0.92, E: 0.94, D: 0.957, C: 0.972, B: 0.9
 export const STYLES = ['逃げ', '先行', '差し', '追込'];
 
 export const COAT = [
-  { name: '鹿毛', body: 0x6b3a1e, mane: 0x1a0f08, leg: 0x1a0f08 },
-  { name: '黒鹿毛', body: 0x3a2314, mane: 0x120a06, leg: 0x120a06 },
-  { name: '青鹿毛', body: 0x24170f, mane: 0x0b0705, leg: 0x0b0705 },
-  { name: '栗毛', body: 0x9a4f22, mane: 0xb8743c, leg: 0x8a4520 },
-  { name: '栃栗毛', body: 0x6e3a1c, mane: 0xc9a06a, leg: 0x6e3a1c },
-  { name: '芦毛', body: 0x9c9a96, mane: 0x6a6866, leg: 0x55524f },
+  { name: '鹿毛', body: 0x93501f, mane: 0x241208, leg: 0x241208 },
+  { name: '黒鹿毛', body: 0x5a3018, mane: 0x150a05, leg: 0x150a05 },
+  { name: '青鹿毛', body: 0x2e1c14, mane: 0x0b0705, leg: 0x0b0705 },
+  { name: '栗毛', body: 0xcf7430, mane: 0xd88a42, leg: 0xb8642a },
+  { name: '栃栗毛', body: 0xa85a26, mane: 0xe0b878, leg: 0x985022 },
+  { name: '芦毛', body: 0xc4c2be, mane: 0x8a8886, leg: 0x6a6866 },
 ];
 
 export const SILKS = [0xd62828, 0x1d4ed8, 0xf2c200, 0x16a34a, 0xf97316, 0x9333ea, 0xffffff, 0x111111,

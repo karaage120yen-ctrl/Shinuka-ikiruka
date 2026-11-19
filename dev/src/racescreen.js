@@ -29,9 +29,11 @@ export function startRace(cfg) {
       <div class="gauge-wrap"><div class="gauge-label"><span>体力</span><span id="h-speed">0 km/h</span></div><div class="gauge"><div id="h-gauge"></div></div></div>
       <div class="ctrl">
         <div class="steer"><button id="b-left" class="cbtn">◀</button><button id="b-right" class="cbtn">▶</button></div>
+        <button id="b-god" class="cbtn god hidden">馬神</button>
         <button id="b-whip" class="cbtn whip">ムチ</button>
       </div>
     </div>
+    <div id="h-buff" class="hud-buff"></div><div id="god-fx" class="god-fx"></div>
     <div id="h-pre" class="hud-pre hidden"></div>
     <div id="h-replay" class="hud-replay hidden"></div>
     <div id="h-result" class="hud-result hidden"></div>`;
@@ -62,7 +64,7 @@ export function startRace(cfg) {
   A.initAudio(); A.setSound(S.settings.sound); A.setVolumes(S.settings.vol); A.stopBgm(); A.startCrowd(); A.crowdLevel(0.05);
   const caller = new Commentator(race, { focus: () => race.player });
 
-  const input = { steer: 0, whip: false, l: false, r: false };
+  const input = { steer: 0, whip: false, l: false, r: false, god: false };
   const $ = (id) => document.getElementById(id);
   const hold = (el, on, off) => {
     el.addEventListener('pointerdown', (e) => { e.preventDefault(); try { el.setPointerCapture(e.pointerId); } catch (_) { } el.classList.add('on'); on(); });
@@ -72,6 +74,7 @@ export function startRace(cfg) {
   hold($('b-left'), () => { input.l = true; }, () => { input.l = false; });
   hold($('b-right'), () => { input.r = true; }, () => { input.r = false; });
   hold($('b-whip'), () => { input.whip = true; }, null);
+  if (!SPEC && race.player.god === 1) { $('b-god').classList.remove('hidden'); hold($('b-god'), () => { input.god = true; }, null); }
   const keys = (e, down) => {
     if (e.key === 'ArrowLeft' || e.key === 'a') input.l = down;
     if (e.key === 'ArrowRight' || e.key === 'd') input.r = down;
@@ -80,7 +83,7 @@ export function startRace(cfg) {
   const kd = (e) => keys(e, true), ku = (e) => keys(e, false);
   window.addEventListener('keydown', kd); window.addEventListener('keyup', ku);
   const views = ['fp', 'back', 'tv'];
-  const viewNames = { fp: '騎手視点', back: '後ろから', tv: '中継', goal: 'ゴール前', orbit: 'パドック' };
+  const viewNames = { fp: '騎手視点', back: '後ろから', tv: '中継', goal: 'ゴール前', orbit: 'パドック', front: '正面' };
   $('h-view').textContent = viewNames[view.view] || '視点';
   $('h-view').onclick = () => { if (phase !== 'race') return; const v = views[(views.indexOf(view.view) + 1) % views.length]; view.setView(v); if (!SPEC) { S.settings.view = v; save(); } $('h-view').textContent = viewNames[v]; };
   let quit = false;
@@ -172,7 +175,7 @@ export function startRace(cfg) {
     let steps = 0;
     input.steer = ((input.r ? 1 : 0) - (input.l ? 1 : 0)) * (TRACK.dir === -1 ? -1 : 1);
     while (acc >= 1 / 60 && steps < 6 * SPEED) {
-      stepRace(race, 1 / 60, input); input.whip = false; acc -= 1 / 60; steps++;
+      stepRace(race, 1 / 60, input); input.whip = false; input.god = false; acc -= 1 / 60; steps++;
       if (race.started && !(ended && endT > 5)) record();
     }
     // イベント
@@ -180,6 +183,11 @@ export function startRace(cfg) {
       if (ev.type === 'start') { say('スタート！', 1.2, 'big'); A.gateOpen(); if (cfg.rival) setTimeout(() => say(`ライバル ${cfg.rival} も一緒に走る！`, 1.8), 1500); }
       else if (ev.type === 'whip') { view.onWhip(); A.whip(); }
       else if (ev.type === 'bump') { A.bump(); }
+      else if (ev.type === 'god') {
+        if (ev.r.isPlayer && !SPEC) { say('メダルゲームの馬神！', 2.2, 'big god'); $('b-god').classList.add('used'); $('god-fx').classList.add('on'); setTimeout(() => { const g = $('god-fx'); if (g) g.classList.remove('on'); }, 2000 / SPEED); view.onWhip(); A.coin(); A.cheer(); }
+        else caller.lines.push(`${ev.r.num}番 ${ev.r.name}、メダルゲームの馬神が降臨！`);
+        view.godGlow && view.godGlow(ev.r);
+      }
       else if (ev.type === 'stumble') { if (ev.r.isPlayer && !SPEC) { say('つまずいた！ 追いすぎだ！', 1.6, 'warn'); view.onWhip(); A.bump(); } else caller.lines.push(`${ev.r.num}番 ${ev.r.name}、つまずいた！`); }
       else if (ev.type === 'fall') {
         A.thud(); A.crowdLevel(0.45);
@@ -225,6 +233,7 @@ export function startRace(cfg) {
     { const vs = $('vig-speed'); if (vs) { vs.style.opacity = SPEC || phase !== 'race' ? 0 : Math.max(0, Math.min(1, (pl.v - 15.5) / 2.5)) * 0.7 + (pl.whipT > 0 ? 0.3 : 0) + (ratio <= 0 ? 0.25 : 0); vs.classList.toggle('empty', ratio <= 0); } }
     $('h-speed').textContent = Math.round(pl.v * 3.6) + ' km/h' + (pl.whipT > 0 ? ' ⚡' : '');
     $('b-whip').classList.toggle('cool', pl.whipCool > 0);
+    if (!SPEC) { const b2 = []; if (pl.slip > 0.25 && !pl.finished) b2.push('<span class="bf slip">🌀 スリップストリーム</span>'); if (pl.duel && !pl.finished) b2.push('<span class="bf duel">🔥 競り合い</span>'); if (pl.godT > 0) b2.push('<span class="bf godb">✨ 馬神</span>'); const html = b2.join(''); const hb = $('h-buff'); if (hb.innerHTML !== html) hb.innerHTML = html; }
     if (SPEC) { const top = [...race.racers].sort((a, b) => (a.rank || 99) - (b.rank || 99)).slice(0, 3); $('h-msg2').innerHTML = top.map((r, i) => `<span><small>${i + 1}</small>${r.num}</span>`).join(''); }
     if (!SPEC && pl.blocked && !pl.finished) { blockedT += dt; if (blockedT > 0.8 && msgT <= 0) say('前が詰まっている！ 左右に動け！', 1.3, 'warn'); } else blockedT = 0;
     if (!SPEC && ratio <= 0 && !pl.finished && !pl.fallen && msgT <= 0 && race.started) say('スタミナ切れ！ これ以上追うと危ない…', 1.6, 'warn');
@@ -296,7 +305,7 @@ export function startRace(cfg) {
     finalT = finalT || race.t;
     phase = 'replay'; RP.t = Math.max(0, REC[0].t); RP.sp = 1;
     $('h-result').classList.add('hidden'); root.classList.add('replaying');
-    const vw = ['tv', 'back', 'fp', 'goal'];
+    const vw = ['tv', 'back', 'front', 'fp', 'goal'];
     const bar = () => {
       $('h-replay').innerHTML = `<div class="rp-top">🔁 リプレイ <span id="rp-t"></span></div>
         <div class="rp-bar"><input type="range" id="rp-seek" min="0" max="1000" value="0"></div>
@@ -340,5 +349,5 @@ export function startRace(cfg) {
     cfg.onDone && cfg.onDone(quit ? null : res);
   }
   active = { race, view };
-  window.__race = race;
+  window.__race = race; window.__view = view;
 }

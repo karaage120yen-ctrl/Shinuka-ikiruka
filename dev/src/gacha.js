@@ -28,7 +28,7 @@ P.push(mk('SSR', 4, 'jockey', '先輩騎手', { train: { tec: 0.3 }, start: { ju
 P.push(mk('SSR', 5, 'jockey', 'トレーナー', { train: { fit: 0.3 }, inj: 0.15 }));
 P.push(mk('SSR', 6, 'both', '馬主', { money: 0.25, ev: 0.06 }));
 // ピックアップ：ナベブギョウ（競走馬のキャラ。馬の育成で効き、馬として育てることもできる）
-P.push({ ...mk('SSR', 7, 'horse', '競走馬', { sta: 3, cond: 1.5, train: { sta: 0.15, gut: 0.15 }, inj: 0.1 }), horse: true, coat: 1, style: '差し' });
+P.push({ ...mk('SSR', 7, 'horse', '競走馬', { sta: 3, cond: 1.5, train: { sta: 0.15, gut: 0.15 }, inj: 0.1 }), horse: true, coat: 3, style: '差し', skill: 'umagami' });
 // SR：1〜2つの効果
 const SRX = [
   ['horse', '厩務員', { train: { gut: 0.2 }, cond: 1 }], ['horse', '調教助手', { train: { wis: 0.2 } }], ['horse', '装蹄師', { inj: 0.18 }],

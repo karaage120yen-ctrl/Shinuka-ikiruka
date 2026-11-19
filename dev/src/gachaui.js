@@ -22,7 +22,7 @@ function draw() {
   if (tab === 'pull') {
     const pk = GACHA_POOL.find(c => c.id === PICKUP);
     body = `<div class="banner pickup"><canvas id="nabe" width="160" height="160"></canvas><div class="bn-info"><div class="bn-tag">PICK UP</div><div class="bn-title">ナベブギョウ</div><div class="bn-sub">SSR・競走馬　期間なし</div>
-      <div class="bn-fx">${fxText(pk.fx).join('<br>')}</div></div></div>
+      <div class="bn-fx"><b>特殊能力「メダルゲームの馬神」</b><br>レース中1回、2秒間ぐんと加速<br>${fxText(pk.fx).join('<br>')}</div></div></div>
     <div class="rates">SSR ${RATES.SSR * 100}%（うちナベブギョウ ${PICKUP_RATE * 100}%）　SR ${RATES.SR * 100}%　R ${RATES.R * 100}%<br>10連はSR以上1枚確定　天井：あと <b>${PITY - (S.gachaPity || 0)}</b> 回でナベブギョウ確定</div>
     <div class="row2"><button class="btn primary" data-act="p1">1回引く<small>🥕${COST_1}</small></button><button class="btn race" data-act="p10">10連<small>🥕${COST_10}</small></button></div>
     <p class="note">同じキャラが出ると「凸」が上がって効果が強くなる（◆1つで+25%、最大◆◆◆◆で2倍）。引いたキャラは「編成」で育成に連れていく。</p>`;

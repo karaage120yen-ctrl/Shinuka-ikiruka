@@ -31,7 +31,7 @@ export function preview(sire, dam) {
   const bonus = Math.min(6, ((sire.g1Wins || 0) + (dam.g1Wins || 0)) * 1.2);
   const pot = clamp(Math.round(o * 0.35 + 52 + bonus), 70, 93);
   const best = [...H_KEYS].sort((a, b) => avg[b] - avg[a]).slice(0, 2);
-  const skills = [...new Set([...(sire.skills || []), ...(dam.skills || [])])].filter(k => SKILLS[k] && SKILLS[k].k === 'horse');
+  const skills = [...new Set([...(sire.skills || []), ...(dam.skills || [])])].filter(k => SKILLS[k] && SKILLS[k].k === 'horse' && k !== 'umagami');
   return { pot, grade: potGrade(pot), best, skills, avg };
 }
 

@@ -115,7 +115,7 @@ export function makeRacer(spec) {
   const cap = (1100 + 24 * h.sta) * (hs.includes('stayer') ? 1.06 : 1) * (1 + (SR() - 0.5) * 0.08);
   const R = {
     ...spec,
-    top, cap, energy: cap,
+    top, cap, energy: cap, god: hs.includes('umagami') ? 1 : 0, godT: 0, slip: 0, duel: 0,
     accel: 0.42 + 0.008 * h.pow,
     startAccel: 3.0 + 0.022 * h.pow,
     eff: (1.06 - 0.0012 * h.wis) * (1.08 - 0.0016 * j.bal),
@@ -210,6 +210,7 @@ export function stepRace(race, dt, input) {
       // 直線では馬が自分から伸びる（体力に合わせて）
       if (rem < r.spurtDist * 0.9) target = clamp(sustainSpeed(r, rem, false), r.top * 0.86, r.top);
       if (input && input.whip && r.whipCool <= 0) { doWhip(r, race); whipping = true; }
+      if (input && input.god && r.god === 1 && race.started && !r.finished) { r.god = 2; r.godT = 2; race.events.push({ type: 'god', r }); }
     } else {
       // CPUの作戦
       target = r.top * r.cruise;
@@ -251,18 +252,33 @@ export function stepRace(race, dt, input) {
     target = Math.min(target, r.top * 1.07);
     // ---- 前が詰まる ----
     r.blocked = false;
+    // ---- スリップストリーム（前の馬の真後ろ）・競り合い（横に並んだ馬） ----
+    r.slip = 0; r.duel = 0;
+    if (!r.finished && race.started) {
+      for (const o of race.racers) {
+        if (o === r || o.finished) continue;
+        const du = o.p - r.p, dd = Math.abs(o.d - r.d);
+        if (du > 1.2 && du < 6 && dd < 1.1 && o.v > 12) r.slip = Math.max(r.slip, 1 - (du - 1.2) / 4.8);
+        if (Math.abs(du) < 1.4 && dd > 0.6 && dd < 2.2 && rem < 500) r.duel = 1;
+      }
+    }
+    if (r.slip > 0) target += 0.18 * r.slip;               // 風よけで少しだけ楽に速く
+    if (r.duel) target += 0.0035 * r.h.gut * (r.energy > 0 ? 1 : 0.3); // 根性で負けない
+    // ---- 特殊能力「メダルゲームの馬神」：2秒間、押し出す力が増える ----
+    if (r.god === 1 && (r.ai || !r.isPlayer) && rem < 260 && !r.finished) { r.god = 2; r.godT = 2; race.events.push({ type: 'god', r }); }
+    if (r.godT > 0) { r.godT -= dt; target += 2.4; }
     for (const o of rs) {
       if (o === r) continue;
       const du = o.p - r.p;
       if (du > 0 && du < 2.7 && Math.abs(o.d - r.d) < 0.95) { if (target > o.v + 0.05) { target = o.v + 0.05; r.blocked = true; } }
     }
     // ---- 加速 ----
-    const a = r.v < 13 ? r.startAccel : (target > r.v ? r.accel : r.energy <= 0 ? 2.2 : 0.9);
+    const a = r.v < 13 ? r.startAccel : (target > r.v ? r.accel * (r.godT > 0 ? 3.2 : 1) : r.energy <= 0 ? 2.2 : 0.9);
     if (r.v < target) r.v = Math.min(target, r.v + a * dt); else r.v = Math.max(target, r.v - a * dt);
     if (r.bump > 0) { r.v -= 0.5 * dt; r.bump -= dt; }
     // ---- スタミナ ----
     if (!r.finished) {
-      const m = r.eff * (r.whipT > 0 ? r.whipDrain : 1);
+      const m = r.eff * (r.whipT > 0 ? r.whipDrain : 1) * (1 - 0.18 * r.slip);
       r.energy -= Math.pow(r.v / VREF, 4) * m * r.v * dt * (r.slope > 0 ? 1 + r.slope * 8 : 1);
       if (r.energy < 0) r.energy = 0;
     }

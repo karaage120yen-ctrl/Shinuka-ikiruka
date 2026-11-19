@@ -53,16 +53,16 @@ export function turfTex() {
   if (!TURF.c) {
     const S = 1024, c = canvas(S, S), x = c.getContext('2d');
     const n1 = vnoise(S, S, 128, 3), n2 = vnoise(S, S, 32, 7);
-    x.fillStyle = 'rgb(70,132,46)'; x.fillRect(0, 0, S, S);
-    // 刈り目：進む方向に明暗の帯（1枚に2本）＋市松
+    x.fillStyle = 'rgb(92,170,52)'; x.fillRect(0, 0, S, S);
+    // 刈り目：進む方向にくっきりした明暗の帯＋やわらかいムラ（明るいアニメ調の芝）
     fbmFill(x, S, S, (px, py) => {
       const band = (Math.floor(px / (S / 2)) + Math.floor(py / (S / 2))) % 2 ? 1 : -1;
-      const k = band * 9 + (n1(px, py) - 0.5) * 26 + (n2(px, py) - 0.5) * 12;
-      return [70 + k * 0.7, 132 + k, 46 + k * 0.45];
+      const k = band * 11 + (n1(px, py) - 0.5) * 14 + (n2(px, py) - 0.5) * 7;
+      return [92 + k * 0.6, 170 + k, 52 + k * 0.35];
     });
-    blades(x, S, S, 38000, [74, 140, 50], 60, 6);
+    blades(x, S, S, 26000, [100, 182, 58], 34, 6);
     // クローバーや土の見えるところ
-    for (let i = 0; i < 120; i++) { x.fillStyle = `rgba(${Math.random() < 0.5 ? '96,84,52' : '40,90,30'},${0.12 + Math.random() * 0.12})`; x.beginPath(); x.ellipse(Math.random() * S, Math.random() * S, 3 + Math.random() * 10, 2 + Math.random() * 6, Math.random() * 3, 0, Math.PI * 2); x.fill(); }
+    for (let i = 0; i < 30; i++) { x.fillStyle = `rgba(${Math.random() < 0.5 ? '96,84,52' : '40,90,30'},${0.12 + Math.random() * 0.12})`; x.beginPath(); x.ellipse(Math.random() * S, Math.random() * S, 3 + Math.random() * 10, 2 + Math.random() * 6, Math.random() * 3, 0, Math.PI * 2); x.fill(); }
     TURF.c = c;
     // でこぼこ用（明るさから作る）
     const b = canvas(512, 512), bx = b.getContext('2d'); bx.drawImage(c, 0, 0, 512, 512);
@@ -103,9 +103,9 @@ export function dirtTex() {
 export function grassTex() {
   const S = 512, c = canvas(S, S), x = c.getContext('2d');
   const n1 = vnoise(S, S, 128, 21), n2 = vnoise(S, S, 24, 4);
-  x.fillStyle = 'rgb(76,124,46)'; x.fillRect(0, 0, S, S);
-  fbmFill(x, S, S, (px, py) => { const k = (n1(px, py) - 0.5) * 46 + (n2(px, py) - 0.5) * 18; return [76 + k * 0.9, 124 + k, 46 + k * 0.4]; });
-  blades(x, S, S, 14000, [76, 124, 46], 60, 4);
+  x.fillStyle = 'rgb(96,162,56)'; x.fillRect(0, 0, S, S);
+  fbmFill(x, S, S, (px, py) => { const k = (n1(px, py) - 0.5) * 30 + (n2(px, py) - 0.5) * 12; return [96 + k * 0.8, 162 + k, 56 + k * 0.4]; });
+  blades(x, S, S, 12000, [100, 170, 58], 40, 4);
   return tex(c);
 }
 // 草のかたまり（近くに生える立体の草）
@@ -232,7 +232,7 @@ export function clothTex(num, color) {
 export function coatTex() {
   const c = canvas(256, 256), x = c.getContext('2d');
   x.fillStyle = '#ffffff'; x.fillRect(0, 0, 256, 256);
-  x.globalAlpha = 0.18;
+  x.globalAlpha = 0.07;
   for (let i = 0; i < 4000; i++) {
     x.fillStyle = Math.random() < 0.5 ? '#000' : '#fff';
     const px = Math.random() * 256, py = Math.random() * 256;
