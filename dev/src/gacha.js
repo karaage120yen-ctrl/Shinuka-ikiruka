@@ -27,8 +27,8 @@ P.push(mk('SSR', 3, 'horse', '獣医', { inj: 0.3, train: { pow: 0.2 } }));
 P.push(mk('SSR', 4, 'jockey', '先輩騎手', { train: { tec: 0.3 }, start: { jud: 4 } }));
 P.push(mk('SSR', 5, 'jockey', 'トレーナー', { train: { fit: 0.3 }, inj: 0.15 }));
 P.push(mk('SSR', 6, 'both', '馬主', { money: 0.25, ev: 0.06 }));
-// ピックアップ：ナベブギョウ（鍋で体を作る食事番。馬にも騎手にも効く）
-P.push(mk('SSR', 7, 'both', '鍋奉行', { sta: 3, cond: 1.5, train: { sta: 0.15, gut: 0.15 }, inj: 0.1 }));
+// ピックアップ：ナベブギョウ（競走馬のキャラ。馬の育成で効き、馬として育てることもできる）
+P.push({ ...mk('SSR', 7, 'horse', '競走馬', { sta: 3, cond: 1.5, train: { sta: 0.15, gut: 0.15 }, inj: 0.1 }), horse: true, coat: 1, style: '差し' });
 // SR：1〜2つの効果
 const SRX = [
   ['horse', '厩務員', { train: { gut: 0.2 }, cond: 1 }], ['horse', '調教助手', { train: { wis: 0.2 } }], ['horse', '装蹄師', { inj: 0.18 }],
@@ -52,6 +52,7 @@ export const charName = (c) => NAMES[c.id] || '';
 export const charLabel = (c) => NAMES[c.id] || `${c.role} No.${c.id.split('-')[1]}`;
 export const cardName = (c) => NAMES[c.id] || `No.${c.id.split('-')[1]}`;
 export const KIND_N = { horse: '馬の育成', jockey: '騎手の育成', both: '馬・騎手どちらも' };
+export const isHorseChar = (c) => !!c.horse;
 const SN = { spd: 'スピード', sta: 'スタミナ', pow: 'パワー', gut: '根性', wis: '賢さ', tec: '技術', whip: 'ムチ', bal: 'バランス', fit: '持久力', jud: '判断力' };
 
 export function lvOf(owned, id) { return Math.min(4, Math.max(0, (owned[id] || 0) - 1)); }
@@ -117,7 +118,7 @@ export function deckFx(kind, deck, ownedList, selfId) {
   return out;
 }
 
-// ===== ガチャキャラを騎手として育てる =====
+// ===== ガチャキャラを育てる（人は騎手、馬は競走馬として） =====
 // レア度と凸で素質が上がる。キャラ自身の効果は1.5倍で、ずっと自分に効く
 export const CHAR_POT = { SSR: [86, 90], SR: [83, 87], R: [80, 84] };
 export function charJockeyOpts(c, ownedList) {

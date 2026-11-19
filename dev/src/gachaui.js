@@ -12,7 +12,7 @@ function card(c, owned, opt = {}) {
   const n = owned[c.id] || 0, lv = lvOf(owned, c.id);
   return `<button class="ccard ${c.rarity} ${n ? '' : 'none'} ${opt.on ? 'sel' : ''}" data-act="${opt.act || 'info'}" data-v="${c.id}">
     <span class="rar">${c.rarity}</span><span class="role">${esc(c.role)}</span><span class="cn">${n ? esc(cardName(c)) : '？？？'}</span>
-    ${n ? `<span class="cnt">${'◆'.repeat(lv)}${'◇'.repeat(4 - lv)}</span>` : ''}<span class="kd">${c.kind === 'horse' ? '🐴' : c.kind === 'jockey' ? '🏇' : '⭐'}</span></button>`;
+    ${n ? `<span class="cnt">${'◆'.repeat(lv)}${'◇'.repeat(4 - lv)}</span>` : ''}<span class="kd">${c.horse ? '🐎' : c.kind === 'horse' ? '🐴' : c.kind === 'jockey' ? '🏇' : '⭐'}</span></button>`;
 }
 function draw() {
   const owned = ownedMap();
@@ -21,7 +21,7 @@ function draw() {
   let body = '';
   if (tab === 'pull') {
     const pk = GACHA_POOL.find(c => c.id === PICKUP);
-    body = `<div class="banner pickup"><canvas id="nabe" width="160" height="160"></canvas><div class="bn-info"><div class="bn-tag">PICK UP</div><div class="bn-title">ナベブギョウ</div><div class="bn-sub">SSR・${esc(pk.role)}　期間なし</div>
+    body = `<div class="banner pickup"><canvas id="nabe" width="160" height="160"></canvas><div class="bn-info"><div class="bn-tag">PICK UP</div><div class="bn-title">ナベブギョウ</div><div class="bn-sub">SSR・競走馬　期間なし</div>
       <div class="bn-fx">${fxText(pk.fx).join('<br>')}</div></div></div>
     <div class="rates">SSR ${RATES.SSR * 100}%（うちナベブギョウ ${PICKUP_RATE * 100}%）　SR ${RATES.SR * 100}%　R ${RATES.R * 100}%<br>10連はSR以上1枚確定　天井：あと <b>${PITY - (S.gachaPity || 0)}</b> 回でナベブギョウ確定</div>
     <div class="row2"><button class="btn primary" data-act="p1">1回引く<small>🥕${COST_1}</small></button><button class="btn race" data-act="p10">10連<small>🥕${COST_10}</small></button></div>
@@ -57,7 +57,7 @@ function draw() {
     const c = GACHA_POOL.find(x => x.id === id), n = owned[id] || 0;
     if (!n) { toast('まだ持っていない'); return; }
     modal(`<h2><span class="r-${c.rarity}">${c.rarity}</span> ${esc(charLabel(c))}</h2><p class="small">${esc(c.role)}・${KIND_N[c.kind]}で効く・持っている数 ${n}（${lvOf(owned, id)}凸）</p>
-      <ul class="fx">${fxText(c.fx, lvOf(owned, id)).map(t => `<li>${t}</li>`).join('')}</ul><p class="small">🏇 騎手の育成で「ガチャキャラを騎手として育てる」を選ぶと、このキャラ自身を育てられる。</p><button class="btn primary wide" data-close>閉じる</button>`);
+      <ul class="fx">${fxText(c.fx, lvOf(owned, id)).map(t => `<li>${t}</li>`).join('')}</ul><p class="small">${c.horse ? '🐴 馬の育成で「ガチャの馬を育てる」を選ぶと、この馬自身を競走馬として育てられる。' : '🏇 騎手の育成で「ガチャのキャラを育てる」を選ぶと、このキャラ自身を騎手として育てられる。'}</p><button class="btn primary wide" data-close>閉じる</button>`);
   };
   bind({
     go: () => back(), tab: (v) => { tab = v; draw(); }, dk: (v) => { deckKind = v; draw(); },
@@ -67,32 +67,27 @@ function draw() {
   });
 }
 
-// ナベブギョウの絵（ドット絵）：ちょんまげの奉行が、湯気の立つ鍋をおたまで仕切っている
+// ナベブギョウの絵（ドット絵）：栗毛の競走馬。おでこに白い流星、首に土鍋の飾り（鍋奉行だけに）
 export function drawNabe(cv) {
   const x = cv.getContext('2d'), P = 5; x.imageSmoothingEnabled = false;
   x.clearRect(0, 0, cv.width, cv.height);
   const px = (c, a, b, w = 1, h = 1) => { x.fillStyle = c; x.fillRect(a * P, b * P, w * P, h * P); };
-  // 後光
   const g = x.createRadialGradient(80, 70, 10, 80, 70, 80); g.addColorStop(0, 'rgba(255,220,120,.55)'); g.addColorStop(1, 'rgba(255,220,120,0)'); x.fillStyle = g; x.fillRect(0, 0, 160, 160);
-  // ちょんまげ
-  px('#1a1a1a', 15, 2, 2, 1); px('#1a1a1a', 14, 3, 4, 1);
-  // 頭・顔
-  px('#2b2b2b', 11, 4, 10, 2); px('#f1c9a5', 11, 6, 10, 6); px('#e2b48c', 11, 11, 10, 1);
-  px('#1a1a1a', 13, 8, 2, 1); px('#1a1a1a', 17, 8, 2, 1);          // まゆ（きりっと）
-  px('#111', 13, 9, 1, 1); px('#111', 18, 9, 1, 1);                 // 目
-  px('#c0392b', 15, 10, 2, 1);                                       // 口
-  px('#f7a8a0', 12, 10, 1, 1); px('#f7a8a0', 19, 10, 1, 1);          // ほっぺ
-  // 裃（かみしも）
-  px('#2c3e7a', 7, 12, 18, 3); px('#2c3e7a', 9, 15, 14, 8); px('#f4f1ea', 14, 12, 4, 6); px('#e8c547', 15, 14, 2, 1);
-  px('#1f2d5a', 7, 12, 2, 1); px('#1f2d5a', 23, 12, 2, 1);
-  // 腕とおたま
-  px('#2c3e7a', 23, 15, 3, 3); px('#f1c9a5', 25, 17, 2, 2); px('#8a6a3a', 26, 13, 1, 6); px('#c9c9c9', 25, 19, 3, 2);
-  px('#2c3e7a', 6, 15, 3, 3); px('#f1c9a5', 6, 18, 2, 2);
-  // 鍋（土鍋）
-  px('#5a3a22', 7, 22, 18, 1); px('#7a4a2a', 6, 23, 20, 5); px('#5a3a22', 7, 28, 18, 1); px('#3a2414', 5, 24, 1, 2); px('#3a2414', 26, 24, 1, 2);
-  // 具（ねぎ・白菜・豆腐・にんじん）
-  px('#f4f1ea', 8, 22, 3, 1); px('#7ab04a', 12, 21, 4, 1); px('#ff8a3d', 17, 21, 2, 1); px('#f4f1ea', 20, 22, 3, 1); px('#d84a3a', 22, 21, 1, 1);
-  // 湯気
-  x.fillStyle = 'rgba(255,255,255,.75)';
-  for (const [a, b] of [[10, 18], [15, 16], [20, 18]]) { x.fillRect(a * P, b * P, P, P * 2); x.fillRect((a + 1) * P, (b - 2) * P, P, P * 2); }
+  const B = '#a5542a', D = '#7a3a1a', L = '#c86e3c', M = '#3a1a0a';
+  // たてがみ・耳
+  px(M, 16, 3, 2, 2); px(M, 19, 3, 2, 2); px(B, 16, 4, 1, 1); px(B, 20, 4, 1, 1);
+  px(M, 12, 6, 2, 9); px(M, 11, 8, 1, 6);
+  // 頭（右向き）
+  px(B, 14, 5, 8, 4); px(B, 19, 9, 6, 3); px(B, 21, 12, 5, 3); px(D, 24, 14, 2, 1); px(M, 25, 13, 1, 1);
+  px('#f4f1ea', 18, 5, 2, 3); px('#f4f1ea', 20, 8, 1, 2);            // 流星
+  px('#111', 19, 7, 1, 1); px('#fff', 19, 7, 0.4, 0.4);                // 目
+  px(L, 15, 6, 2, 2);
+  // 首と胴
+  px(B, 14, 9, 6, 6); px(B, 12, 13, 8, 3); px(B, 6, 15, 16, 6); px(L, 8, 15, 10, 1); px(D, 6, 20, 16, 1);
+  px(M, 3, 15, 3, 2); px(M, 2, 17, 2, 4); px(M, 1, 20, 2, 2);          // しっぽ
+  // 脚
+  for (const [a, w] of [[7, 0], [10, 1], [17, 0], [20, 1]]) { px(w ? D : B, a, 21, 2, 5); px('#f4f1ea', a, 25, 2, 1); px('#222', a, 26, 2, 1); }
+  // 首の土鍋のお守り
+  px('#e8c547', 15, 14, 4, 1); px('#7a4a2a', 15, 15, 4, 2); px('#5a3a22', 14, 15, 1, 1); px('#5a3a22', 19, 15, 1, 1);
+  x.fillStyle = 'rgba(255,255,255,.8)'; x.fillRect(16 * P, 12.6 * P, P * 0.6, P * 1.2); x.fillRect(17.4 * P, 12.2 * P, P * 0.6, P * 1.2);
 }
