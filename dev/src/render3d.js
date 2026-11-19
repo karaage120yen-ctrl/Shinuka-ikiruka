@@ -226,7 +226,7 @@ export class RaceView {
       const stand = new THREE.Group(); stand.position.y = sy; S.add(stand);
       const apron = new THREE.Mesh(new THREE.PlaneGeometry(len + 40, 16), new THREE.MeshStandardMaterial({ color: 0x9a9a94, roughness: 1 }));
       apron.rotation.x = -Math.PI / 2; apron.position.set(cx, 0.01, R + W + 6); apron.receiveShadow = true; stand.add(apron);
-      const ct = crowdTex(); ct.repeat.set(len / 16, 3);
+      const ct = crowdTex(); ct.repeat.set(len / 24, 3); this.crowdT = ct;
       const seats = new THREE.Mesh(new THREE.PlaneGeometry(len, 46 * H), new THREE.MeshStandardMaterial({ map: ct, roughness: 1, emissive: night ? 0x222222 : 0x000000 }));
       seats.rotation.x = -Math.PI / 2 - 0.55; seats.position.set(cx, 11 * H, zS + 19 * H); stand.add(seats);
       const bt = buildingTex(); bt.repeat.set(len / 30, 1);
@@ -242,7 +242,7 @@ export class RaceView {
         const col = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 30 * H, 8), new THREE.MeshStandardMaterial({ color: 0xdddddd }));
         col.position.set(x, 15 * H, zS + 36 * H); stand.add(col);
       }
-      const sct = standingCrowdTex(); sct.repeat.set(len / 30, 1);
+      const sct = standingCrowdTex(); sct.repeat.set(len / 60, 1); this.standT = sct;
       const crowdMat = new THREE.MeshStandardMaterial({ map: sct, transparent: true, alphaTest: 0.4, side: THREE.DoubleSide, roughness: 1, emissive: night ? 0x333333 : 0x000000 });
       for (const [dz, s, y0] of [[R + W + 5.5, 2.1, 0.2], [R + W + 9, 2.3, 0.9], [R + W + 12.5, 2.5, 1.7]]) {
         const cr = new THREE.Mesh(new THREE.PlaneGeometry(len, s), crowdMat);
@@ -315,13 +315,29 @@ export class RaceView {
     if (!coneT.length) coneM.count = 0; if (!roundT.length) roundM.count = 0; if (!palmT.length) palmM.count = 0;
     S.add(trunkM, coneM, roundM, palmM);
     // 遠くの山・街
-    const mtMat = new THREE.MeshStandardMaterial({ color: kind === 'city' ? 0x4f7a5a : desert ? 0xc8a878 : 0x6e8aa0, roughness: 1, flatShading: true });
-    for (let i = 0; i < 14; i++) {
-      const ang = (i / 14) * Math.PI * 2 + Math.random() * 0.2;
-      const dist = 1700 + Math.random() * 600;
-      const mt = new THREE.Mesh(new THREE.ConeGeometry(300 + Math.random() * 300, (desert ? 40 : 160) + Math.random() * (kind === 'city' ? 420 : 220), 7), mtMat);
-      mt.position.set(Math.cos(ang) * dist, 60, Math.sin(ang) * dist); S.add(mt);
-    }
+    // 山なみ：遠い列と近い列の2重。ノイズで稜線を作り、遠いほど青くかすむ
+    const ridge = (R0, hBase, hVar, col, seed, yb) => {
+      const N = 360, pos = [], idx = [], cols = [];
+      const haze = new THREE.Color(this.scene.fog ? this.scene.fog.color : 0xdfe8f0), wet = ['雨', '雪', '小雨'].includes(wx) ? 0.55 : 0;
+      const c0 = new THREE.Color(col).lerp(haze, wet), c1 = new THREE.Color(col).lerp(haze, 0.35 + wet * 0.5);
+      let a1 = seed * 3.1, a2 = seed * 7.7;
+      for (let i = 0; i <= N; i++) {
+        const th = (i / N) * Math.PI * 2;
+        const n = Math.sin(th * 3 + a1) * 0.45 + Math.sin(th * 7 + a2) * 0.3 + Math.sin(th * 17 + a1 * 2) * 0.15 + Math.sin(th * 41 + a2) * 0.06;
+        const h = Math.max(8, hBase + n * hVar);
+        const x = Math.cos(th) * R0, z = Math.sin(th) * R0;
+        pos.push(x, yb, z, x * 1.02, yb + h, z * 1.02);
+        cols.push(c0.r, c0.g, c0.b, c1.r, c1.g, c1.b);
+      }
+      for (let i = 0; i < N; i++) { const a = i * 2; idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
+      const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3)); geo.setIndex(idx); geo.computeVertexNormals();
+      const msh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, fog: false }));
+      msh.frustumCulled = false; return msh;
+    };
+    const far = desert ? 0xc9b48e : kind === 'city' ? 0x7b93a8 : night ? 0x1c2433 : 0x8ea7c0;
+    const near = desert ? 0xb69a72 : kind === 'city' ? 0x5c7f68 : night ? 0x141c18 : 0x5f8070;
+    S.add(ridge(2300, desert ? 40 : 170, desert ? 30 : 140, far, 1.3, -20));
+    S.add(ridge(1500, desert ? 18 : 70, desert ? 15 : 55, near, 4.7, -10));
     if (kind === 'city' || kind === 'night') {
       const bm = new THREE.MeshStandardMaterial({ color: 0x9aa4ae, roughness: 0.4, metalness: 0.4, emissive: night ? 0x334466 : 0x000000 });
       const box = new THREE.BoxGeometry(1, 1, 1); box.translate(0, 0.5, 0);
@@ -496,7 +512,7 @@ export class RaceView {
     const i = this.pI; this.pI = (this.pI + 1) % this.pN;
     const turfBit = this.isTurf && Math.random() < 0.55;
     const c = turfBit ? [0.2 + Math.random() * 0.1, 0.36 + Math.random() * 0.15, 0.12] : [0.36 + Math.random() * 0.12, 0.25 + Math.random() * 0.08, 0.15];
-    this.pCol[i * 3] = c[0]; this.pCol[i * 3 + 1] = c[1]; this.pCol[i * 3 + 2] = c[2];
+    this.pCol[i * 3] = c[0]; this.pCol[i * 3 + 1] = c[1]; this.pCol[i * 3 + 2] = c[2]; this.pDirty = true;
     this.pPos[i * 3] = x; this.pPos[i * 3 + 1] = y; this.pPos[i * 3 + 2] = z;
     this.pVel[i * 3] = vx + (Math.random() - 0.5) * 1.5; this.pVel[i * 3 + 1] = 1.5 + Math.random() * 2.5; this.pVel[i * 3 + 2] = vz + (Math.random() - 0.5) * 1.5;
     this.pLife[i] = 0.7 + Math.random() * 0.4;
@@ -552,6 +568,7 @@ export class RaceView {
       this.pPos[i * 3] += this.pVel[i * 3] * dt; this.pPos[i * 3 + 1] = Math.max(-1, this.pPos[i * 3 + 1] + this.pVel[i * 3 + 1] * dt); this.pPos[i * 3 + 2] += this.pVel[i * 3 + 2] * dt;
     }
     this.pts.geometry.attributes.position.needsUpdate = true;
+    if (this.pDirty) { this.pts.geometry.attributes.color.needsUpdate = true; this.pDirty = false; }
 
     const P = this.player;
     if (P) {
@@ -622,6 +639,13 @@ export class RaceView {
       this.sky.position.copy(camPos);
       if (this.flood) this.flood.position.set(camPos.x, camPos.y + 30, camPos.z);
       if (this.windmill) this.windmill.rotation.z += dt * 0.4;
+      // 観客：ゴールが近づくと立ち上がって盛り上がる
+      if (this.crowdT) {
+        let lead = 0; for (const q of this.race.racers) lead = Math.max(lead, q.p || 0);
+        const ex = lead > this.race.dist - 450 && lead < this.race.dist + 80 ? 1 : 0.12;
+        this.crowdT.offset.y = Math.abs(Math.sin(this.t * 9)) * 0.004 * ex;
+        if (this.standT) this.standT.offset.y = -Math.abs(Math.sin(this.t * 7.3)) * 0.035 * ex;
+      }
       if (this.rain) {
         const a = this.rain.geometry.attributes.position, arr = a.array, sp = this.rainSpeed;
         for (let i = 0; i < arr.length; i += 3) {

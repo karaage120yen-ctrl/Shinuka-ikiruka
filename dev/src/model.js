@@ -21,34 +21,59 @@ function cylDir(r1, r2, len, start, ang, seg = 10) {
   return g(c, mid, th);
 }
 
+// 断面をつないでなめらかな形を作る（rT=上/前側、rB=下/後ろ側、rz=横幅）
+function loft(secs, N = 18) {
+  const pos = [], uv = [], idx = [];
+  const M = secs.length;
+  for (let i = 0; i < M; i++) {
+    const S = secs[i];
+    const a = secs[Math.max(0, i - 1)].c, b = secs[Math.min(M - 1, i + 1)].c;
+    const t = new THREE.Vector3().subVectors(b, a).normalize();
+    const n = new THREE.Vector3(-t.y, t.x, 0).normalize(), bz = new THREE.Vector3(0, 0, 1);
+    for (let j = 0; j <= N; j++) {
+      const th = (j / N) * Math.PI * 2, sn = Math.sin(th), cs = Math.cos(th);
+      const up = sn > 0 ? S.rT * sn : S.rB * sn;
+      const q = S.c.clone().addScaledVector(n, up).addScaledVector(bz, S.rz * cs);
+      pos.push(q.x, q.y, q.z); uv.push(i / (M - 1), j / N);
+    }
+  }
+  for (let i = 0; i < M - 1; i++) for (let j = 0; j < N; j++) {
+    const a = i * (N + 1) + j, b2 = a + N + 1;
+    idx.push(a, b2, a + 1, a + 1, b2, b2 + 1);
+  }
+  // 両端のふた
+  for (const [i, flip] of [[0, true], [M - 1, false]]) {
+    const ci = pos.length / 3; const c = secs[i].c; pos.push(c.x, c.y, c.z); uv.push(i / (M - 1), 0.5);
+    for (let j = 0; j < N; j++) { const a = i * (N + 1) + j; if (flip) idx.push(ci, a + 1, a); else idx.push(ci, a, a + 1); }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  geo.setIndex(idx); geo.computeVertexNormals();
+  return geo;
+}
+const sec = (x, y, rT, rB, rz, z = 0) => ({ c: V(x, y, z), rT, rB, rz });
+function legLoft(rows) { return loft(rows.map(([y, f, b, w, x = 0]) => ({ c: V(x, y, 0), rT: f, rB: b, rz: w })), 14); }
+
 const geoCache = {};
 const NI = (x) => x.index ? x.toNonIndexed() : x;
 function horseGeos() {
   if (geoCache.h) return geoCache.h;
   // 胴体：き甲・胸・肋・腹・トモを重ねて筋肉の起伏を出す
-  const body = mergeGeometries([
-    g(new THREE.CapsuleGeometry(0.39, 1.2, 8, 20), V(0, 1.27, 0), Math.PI / 2, V(1.06, 1, 0.8)),
-    g(new THREE.SphereGeometry(0.46, 20, 14), V(0.64, 1.24, 0), 0, V(1, 1.04, 0.78)),
-    g(new THREE.SphereGeometry(0.3, 14, 10), V(0.72, 1.05, 0.14), 0, V(0.8, 1, 0.7)),   // 肩
-    g(new THREE.SphereGeometry(0.3, 14, 10), V(0.72, 1.05, -0.14), 0, V(0.8, 1, 0.7)),
-    g(new THREE.SphereGeometry(0.48, 20, 14), V(-0.62, 1.3, 0), 0, V(1.02, 1, 0.86)),  // トモ
-    g(new THREE.SphereGeometry(0.32, 14, 10), V(-0.72, 1.14, 0.17), 0, V(1, 1.1, 0.7)),
-    g(new THREE.SphereGeometry(0.32, 14, 10), V(-0.72, 1.14, -0.17), 0, V(1, 1.1, 0.7)),
-    g(new THREE.SphereGeometry(0.3, 14, 10), V(0.48, 1.52, 0), 0, V(1.25, 0.75, 0.66)), // き甲
-    g(new THREE.SphereGeometry(0.36, 16, 10), V(0, 1.06, 0), 0, V(1.6, 0.6, 0.85)),    // 腹
-  ].map(NI));
+  const body = loft([
+    sec(1.0, 1.2, 0.12, 0.12, 0.1), sec(0.92, 1.22, 0.3, 0.3, 0.26), sec(0.78, 1.25, 0.4, 0.44, 0.33),
+    sec(0.55, 1.3, 0.46, 0.47, 0.37), sec(0.3, 1.31, 0.44, 0.47, 0.4), sec(0.02, 1.31, 0.42, 0.44, 0.41),
+    sec(-0.28, 1.33, 0.41, 0.36, 0.39), sec(-0.52, 1.36, 0.43, 0.38, 0.38), sec(-0.76, 1.35, 0.4, 0.38, 0.34),
+    sec(-0.93, 1.31, 0.3, 0.3, 0.25), sec(-1.02, 1.28, 0.12, 0.14, 0.1),
+  ], 24);
   // 首と頭（首の付け根が原点）
   const alpha = 0.42, beta = -1.05;
   const E = V(Math.cos(alpha) * 0.95, Math.sin(alpha) * 0.95, 0);
   const hd = (t) => E.clone().add(V(Math.cos(beta) * t, Math.sin(beta) * t, 0));
-  const neck = mergeGeometries([
-    cylDir(0.28, 0.15, 1.0, V(-0.05, -0.05, 0), alpha, 18),
-    g(new THREE.SphereGeometry(0.2, 12, 8), V(Math.cos(alpha) * 0.35 - 0.03, Math.sin(alpha) * 0.35 + 0.1, 0), alpha, V(1.6, 0.7, 0.65)), // たてがみの下の盛り上がり
-    g(new THREE.SphereGeometry(0.17, 14, 10), E.clone(), 0, V(1.05, 1, 0.82)),
-    g(new THREE.SphereGeometry(0.15, 14, 10), hd(0.12).add(V(-0.03, 0, 0)), beta, V(1, 1.2, 0.95)), // ほお
-    cylDir(0.14, 0.085, 0.56, E.clone().add(V(0.02, 0.02, 0)), beta, 14),
-    g(new THREE.SphereGeometry(0.095, 10, 8), hd(0.58).add(V(0, 0.01, 0)), 0, V(1.15, 0.9, 0.95)), // 鼻先
-  ].map(NI));
+  const na = (t, rT, rB, rz) => ({ c: V(Math.cos(alpha) * t - 0.05, Math.sin(alpha) * t - 0.02, 0), rT, rB, rz });
+  const neckG = loft([na(-0.16, 0.3, 0.36, 0.25), na(0.05, 0.27, 0.31, 0.22), na(0.35, 0.21, 0.23, 0.165), na(0.65, 0.17, 0.18, 0.13), na(0.92, 0.15, 0.16, 0.115)], 20);
+  const hs = (t, rT, rB, rz) => ({ c: hd(t), rT, rB, rz });
+  const headG = loft([hs(-0.08, 0.15, 0.16, 0.12), hs(0.08, 0.14, 0.21, 0.13), hs(0.22, 0.115, 0.13, 0.105), hs(0.4, 0.092, 0.095, 0.085), hs(0.55, 0.088, 0.09, 0.083), hs(0.63, 0.06, 0.06, 0.06)], 20);
+  const neck = mergeGeometries([NI(neckG), NI(headG)]);
   const ears = mergeGeometries([
     g(new THREE.ConeGeometry(0.035, 0.16, 8), E.clone().add(V(-0.04, 0.17, 0.065)), -0.25, null, 0.15),
     g(new THREE.ConeGeometry(0.035, 0.16, 8), E.clone().add(V(-0.04, 0.17, -0.065)), -0.25, null, -0.15),
@@ -81,12 +106,12 @@ function horseGeos() {
   const bridle = mergeGeometries([ring(0.42, 0.105, 1.05), ring(0.06, 0.16, 1.1),
     g(new THREE.TorusGeometry(0.125, 0.012, 6, 16, Math.PI), E.clone().add(V(0.0, 0.07, 0)), Math.PI / 2 - 0.2, V(1, 1, 1.05), 0, Math.PI / 2).toNonIndexed()]);
   // 脚：上・管・つなぎ（球節で曲がる）
-  const upperF = mergeGeometries([g(new THREE.CylinderGeometry(0.07, 0.115, 0.48, 10), V(0, -0.24, 0)), g(new THREE.SphereGeometry(0.075, 8, 6), V(0, -0.48, 0), 0, V(1, 1.1, 0.9))].map(NI));
-  const lowerF = mergeGeometries([g(new THREE.CylinderGeometry(0.04, 0.05, 0.38, 8), V(0, -0.19, 0)), g(new THREE.SphereGeometry(0.058, 8, 6), V(0, -0.39, 0))].map(NI));
+  const upperF = legLoft([[0.04, 0.12, 0.11, 0.1], [-0.12, 0.11, 0.1, 0.085], [-0.3, 0.07, 0.072, 0.06], [-0.43, 0.052, 0.06, 0.05], [-0.48, 0.065, 0.07, 0.064], [-0.53, 0.05, 0.05, 0.048]]);
+  const lowerF = legLoft([[0.02, 0.05, 0.05, 0.045], [-0.15, 0.036, 0.052, 0.035], [-0.32, 0.038, 0.05, 0.038], [-0.39, 0.058, 0.068, 0.056], [-0.43, 0.04, 0.045, 0.04]]);
   const pastF = mergeGeometries([g(new THREE.CylinderGeometry(0.038, 0.042, 0.13, 8), V(0.02, -0.06, 0), 0.25)].map(NI));
   const hoof = g(new THREE.CylinderGeometry(0.055, 0.072, 0.09, 10), V(0.03, -0.155, 0));
-  const upperH = mergeGeometries([g(new THREE.CylinderGeometry(0.08, 0.16, 0.56, 10), V(0, -0.28, 0)), g(new THREE.SphereGeometry(0.08, 8, 6), V(-0.02, -0.56, 0), 0, V(1.3, 1, 0.8))].map(NI));
-  const lowerH = mergeGeometries([g(new THREE.CylinderGeometry(0.042, 0.055, 0.44, 8), V(0, -0.22, 0)), g(new THREE.SphereGeometry(0.06, 8, 6), V(0, -0.45, 0))].map(NI));
+  const upperH = legLoft([[0.06, 0.17, 0.2, 0.13], [-0.16, 0.13, 0.16, 0.105], [-0.38, 0.075, 0.09, 0.065], [-0.53, 0.06, 0.1, 0.06, -0.01], [-0.6, 0.05, 0.06, 0.05]]);
+  const lowerH = legLoft([[0.02, 0.05, 0.055, 0.045], [-0.18, 0.038, 0.054, 0.036], [-0.37, 0.04, 0.052, 0.04], [-0.44, 0.06, 0.07, 0.057], [-0.48, 0.042, 0.046, 0.042]]);
   const sock = g(new THREE.CylinderGeometry(0.047, 0.052, 0.2, 8), V(0, -0.33, 0));
   // しっぽ：付け根＋毛すじを貼った板を3枚交差させて、ふさふさに
   const tailParts = [g(new THREE.CylinderGeometry(0.075, 0.055, 0.28, 8), V(0, -0.13, 0))];

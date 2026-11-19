@@ -145,35 +145,51 @@ export function puffTex() {
 }
 // スタンドの観客
 export function crowdTex() {
-  const c = canvas(512, 256), x = c.getContext('2d');
-  x.fillStyle = '#3a3d44'; x.fillRect(0, 0, 512, 256);
-  const cols = ['#e8e8e8', '#2b2b2b', '#c23b3b', '#3b6cc2', '#e0c040', '#6a4a3a', '#7aa05a', '#d88a4a', '#f0d0b0', '#4a4a7a'];
-  for (let row = 0; row < 16; row++) {
-    const y = row * 16;
-    x.fillStyle = '#55585f'; x.fillRect(0, y + 13, 512, 3);
-    for (let i = 0; i < 70; i++) {
-      if (Math.random() < 0.12) continue;
-      const px = i * 7.3 + Math.random() * 3;
-      x.fillStyle = cols[Math.floor(Math.random() * cols.length)];
-      x.fillRect(px, y + 6, 5, 8);
-      x.fillStyle = ['#f1c9a5', '#d9a87e', '#2a1a10', '#111'][Math.floor(Math.random() * 4)];
-      x.beginPath(); x.arc(px + 2.5, y + 4, 2.3, 0, Math.PI * 2); x.fill();
+  // 座席の観客：肩と頭の形・服の色・影
+  const W = 1024, H = 512, c = canvas(W, H), x = c.getContext('2d');
+  x.fillStyle = '#2f3238'; x.fillRect(0, 0, W, H);
+  const cols = ['#ecebe6', '#2b2b2b', '#c23b3b', '#3b6cc2', '#e0c040', '#6a4a3a', '#7aa05a', '#d88a4a', '#4a4a7a', '#9a9aa2', '#1f5d4a', '#e07aa0', '#ffffff', '#163a7a'];
+  const skin = ['#f1c9a5', '#e2b48c', '#c99a72', '#a87850'], hair = ['#1a120c', '#2a1a10', '#111', '#5a3a20', '#8a8a8a', '#c9a060'];
+  const rows = 16, rh = H / rows;
+  for (let r = 0; r < rows; r++) {
+    const y = r * rh;
+    x.fillStyle = '#4a4e56'; x.fillRect(0, y + rh - 5, W, 5); x.fillStyle = '#5c616a'; x.fillRect(0, y + rh - 5, W, 1.5);
+    for (let px = Math.random() * 6; px < W; px += 9 + Math.random() * 5) {
+      if (Math.random() < 0.08) continue;
+      const cl = cols[Math.floor(Math.random() * cols.length)], sc = 0.85 + Math.random() * 0.3;
+      // 体（肩）
+      x.fillStyle = cl; x.beginPath(); x.ellipse(px, y + rh - 6, 5.2 * sc, 8 * sc, 0, Math.PI, 0); x.fill();
+      x.fillStyle = 'rgba(0,0,0,0.25)'; x.fillRect(px + 1.5 * sc, y + rh - 13 * sc, 3 * sc, 7 * sc);
+      // 頭
+      x.fillStyle = skin[Math.floor(Math.random() * skin.length)]; x.beginPath(); x.arc(px, y + rh - 16 * sc, 3.4 * sc, 0, Math.PI * 2); x.fill();
+      x.fillStyle = Math.random() < 0.15 ? cols[Math.floor(Math.random() * 4)] : hair[Math.floor(Math.random() * hair.length)];
+      x.beginPath(); x.arc(px, y + rh - 17 * sc, 3.6 * sc, Math.PI * 1.05, Math.PI * 1.95); x.fill();
+      // ときどき旗や手
+      if (Math.random() < 0.05) { x.fillStyle = cols[Math.floor(Math.random() * cols.length)]; x.fillRect(px + 3, y + rh - 26, 7, 5); x.fillStyle = '#ddd'; x.fillRect(px + 2.5, y + rh - 26, 1, 12); }
     }
   }
   return tex(c);
 }
 // ラチ沿いに立つ観客（透明背景）
 export function standingCrowdTex() {
-  const c = canvas(1024, 128), x = c.getContext('2d');
-  const cols = ['#f0f0f0', '#222', '#b33', '#36b', '#dc4', '#654', '#7a5', '#d84', '#448', '#999'];
-  for (let i = 0; i < 150; i++) {
-    const px = Math.random() * 1024, h = 70 + Math.random() * 40, w = 12 + Math.random() * 6;
-    x.fillStyle = cols[Math.floor(Math.random() * cols.length)];
-    x.fillRect(px - w / 2, 128 - h + 18, w, h);
-    x.fillStyle = ['#f1c9a5', '#d9a87e', '#c69a72'][Math.floor(Math.random() * 3)];
-    x.beginPath(); x.arc(px, 128 - h + 10, 7, 0, Math.PI * 2); x.fill();
-    x.fillStyle = ['#2a1a10', '#111', '#5a3a20'][Math.floor(Math.random() * 3)];
-    x.beginPath(); x.arc(px, 128 - h + 7, 7, Math.PI, Math.PI * 2); x.fill();
+  const W = 2048, H = 192, c = canvas(W, H), x = c.getContext('2d');
+  const cols = ['#f0f0f0', '#222', '#b33', '#36b', '#dc4', '#654', '#7a5', '#d84', '#448', '#999', '#1f5d4a', '#e07aa0'];
+  const skin = ['#f1c9a5', '#e2b48c', '#c99a72'], hair = ['#2a1a10', '#111', '#5a3a20', '#8a8a8a'];
+  for (let layer = 0; layer < 2; layer++) for (let i = 0; i < 230; i++) {
+    const px = Math.random() * W, h = (110 + Math.random() * 50) * (layer ? 1 : 0.9), w = 22 + Math.random() * 10;
+    const top = H - h, cl = cols[Math.floor(Math.random() * cols.length)];
+    // 脚
+    x.fillStyle = ['#2a2f3a', '#3a3a3a', '#4a5a7a', '#6a5a4a'][Math.floor(Math.random() * 4)];
+    x.fillRect(px - w * 0.3, top + h * 0.6, w * 0.25, h * 0.4); x.fillRect(px + w * 0.05, top + h * 0.6, w * 0.25, h * 0.4);
+    // 胴（丸い肩）
+    x.fillStyle = cl; x.beginPath(); x.moveTo(px - w / 2, top + h * 0.62); x.lineTo(px - w / 2, top + 30); x.quadraticCurveTo(px - w / 2, top + 20, px - w / 4, top + 19); x.lineTo(px + w / 4, top + 19); x.quadraticCurveTo(px + w / 2, top + 20, px + w / 2, top + 30); x.lineTo(px + w / 2, top + h * 0.62); x.fill();
+    x.fillStyle = 'rgba(0,0,0,0.2)'; x.fillRect(px + w * 0.15, top + 22, w * 0.35, h * 0.4);
+    // 手をあげている人
+    if (Math.random() < 0.25) { x.strokeStyle = cl; x.lineWidth = 6; x.beginPath(); x.moveTo(px + w * 0.4, top + 28); x.lineTo(px + w * 0.6, top - 6); x.stroke(); x.fillStyle = skin[0]; x.beginPath(); x.arc(px + w * 0.62, top - 8, 4, 0, 7); x.fill(); }
+    // 頭
+    x.fillStyle = skin[Math.floor(Math.random() * skin.length)]; x.beginPath(); x.arc(px, top + 9, 9, 0, Math.PI * 2); x.fill();
+    x.fillStyle = Math.random() < 0.2 ? cols[Math.floor(Math.random() * 5)] : hair[Math.floor(Math.random() * hair.length)];
+    x.beginPath(); x.arc(px, top + 6, 9.5, Math.PI, Math.PI * 2); x.fill();
   }
   const t = tex(c); return t;
 }
