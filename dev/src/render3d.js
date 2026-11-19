@@ -57,11 +57,11 @@ function skyMesh(sunDir, sky) {
         float s = max(dot(normalize(vDir), sunDir), 0.0);
         c += vec3(1.0,0.9,0.7) * (pow(s, 400.0)*4.0 + pow(s, 12.0)*0.25) * (1.0 - cloud);
         // 雲（空に貼った平面に投影してノイズで描く）
-        vec2 cp = vDir.xz / (h + 0.12) * 1.6;
-        float n = fbm(cp);
-        float cl = smoothstep(0.52 - cloud*0.32, 0.82 - cloud*0.2, n) * smoothstep(0.0, 0.18, h);
+        vec2 cp = vDir.xz / (h + 0.18) * 1.15;
+        float n = fbm(cp) * 0.75 + fbm(cp * 0.45 + 3.1) * 0.35;
+        float cl = smoothstep(0.6 - cloud*0.3, 0.68 - cloud*0.2, n) * smoothstep(0.0, 0.14, h);
         float shade = fbm(cp + sunDir.xz*0.25);
-        vec3 cc = mix(vec3(1.0,0.99,0.97), vec3(0.62,0.66,0.72), clamp((shade - n)*2.2 + 0.35 + cloud*0.3, 0.0, 1.0));
+        vec3 cc = mix(vec3(1.0,1.0,1.0), vec3(0.72,0.78,0.88), clamp((shade - n)*1.6 + 0.25 + cloud*0.3, 0.0, 1.0));
         cc += vec3(1.0,0.85,0.6) * pow(s, 8.0) * 0.35;
         c = mix(c, cc, cl*0.92);
         // 地平線のかすみ
@@ -141,10 +141,11 @@ export class RaceView {
       this.envRT = pm.fromScene(envS, 0.02, 0.1, 500); pm.dispose();
       S.environment = this.envRT.texture; S.environmentIntensity = night ? 0.35 : 0.55;
     } catch (e) { console.warn(e); }
-    const hemiI = night ? 0.16 : 0.62 - cloudy * 0.12;
+    const hemiI = night ? 0.16 : 0.85 - cloudy * 0.15;
     S.add(new THREE.HemisphereLight(night ? 0x8090c0 : 0xd6e8ff, 0x52602f, hemiI));
     const sun = new THREE.DirectionalLight(night ? 0xdfe6ff : 0xfff0d8, night ? 0.9 : 2.6 * (1 - cloudy * 0.6));
     sun.castShadow = true;
+    if ('intensity' in sun.shadow) sun.shadow.intensity = night ? 0.8 : 0.62;
     const hi = !this.opts.lowPower;
     sun.shadow.mapSize.set(hi ? 2048 : 1024, hi ? 2048 : 1024);
     const sc = sun.shadow.camera; sc.left = -30; sc.right = 30; sc.top = 30; sc.bottom = -30; sc.near = 1; sc.far = 220;
@@ -380,15 +381,21 @@ export class RaceView {
     const race = this.race;
     const n = race.racers.length;
     const g = new THREE.Group();
-    const green = new THREE.MeshStandardMaterial({ color: 0x2f7a3a, roughness: 0.6 });
+    const green = new THREE.MeshStandardMaterial({ color: 0x2f9a44, roughness: 0.45, metalness: 0.2 });
     const grey = new THREE.MeshStandardMaterial({ color: 0xcfcfcf, roughness: 0.5 });
+    const white = new THREE.MeshStandardMaterial({ color: 0xf4f6f2, roughness: 0.5 });
     trackPos(race.u0 + 1.6, 0, tmp);
     const ang = Math.atan2(-tmp.hz, tmp.hx), gy = tmp.y;
     for (let i = 0; i <= n; i++) {
       const d = 0.5 + i * 1.25;
       const p = trackPos(race.u0 + 1.6, d, {});
-      const post = new THREE.Mesh(new THREE.BoxGeometry(2.6, 2.4, 0.08), green);
-      post.position.set(p.x, gy + 1.2, p.z); post.rotation.y = ang; g.add(post);
+      // 仕切り：緑の鉄骨の枠＋白い板（トラス）
+      const fr = new THREE.Group(); fr.position.set(p.x, gy, p.z); fr.rotation.y = ang;
+      const bar = (w, h, x, y, rz = 0) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.09), green); m.position.set(x, y, 0); m.rotation.z = rz; fr.add(m); };
+      bar(0.1, 2.5, -1.25, 1.25); bar(0.1, 2.5, 1.25, 1.25); bar(2.6, 0.1, 0, 2.45); bar(2.6, 0.1, 0, 1.3); bar(2.6, 0.1, 0, 0.4);
+      bar(0.07, 1.55, -0.6, 1.85, 0.75); bar(0.07, 1.55, 0.6, 1.85, -0.75);
+      const pn = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.85, 0.04), white); pn.position.set(0, 0.85, 0); fr.add(pn);
+      g.add(fr);
     }
     const a = trackPos(race.u0 + 1.6, 0.5, {}), b = trackPos(race.u0 + 1.6, 0.5 + n * 1.25, {});
     const beam = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.6, n * 1.25 + 0.4), green);
@@ -635,7 +642,7 @@ export class RaceView {
           target = new THREE.Vector3(p.x, (p.y || 0) - 0.6, p.z);
           this.camera.position.copy(camPos); this.camera.lookAt(target);
         } else if (this.view === 'front') {
-          const q = trackPos(r.u + 9, r.d + 1.5, {});
+          const q = trackPos(r.u + (this.frontDist || 9), r.d + (this.frontDist || 9) * 0.17, {});
           camPos.set(q.x, (q.y || 0) + 2.1, q.z);
           target = new THREE.Vector3(p.x, (p.y || 0) + 1.5, p.z);
           this.camera.position.copy(camPos); this.camera.lookAt(target);

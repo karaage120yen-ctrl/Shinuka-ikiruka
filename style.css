@@ -481,3 +481,6 @@ input[type=range] { accent-color: var(--gold); width: 46%; }
 .god-fx { position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .3s; background: radial-gradient(ellipse at 50% 60%, rgba(255,230,120,0) 30%, rgba(255,200,40,.55) 100%); }
 .god-fx.on { opacity: 1; }
 .hud-msg.god { color: #ffe27a; text-shadow: 0 0 12px #ff9d00, 0 3px 0 #000; }
+
+#race-canvas { filter: saturate(1.18) contrast(1.04) brightness(1.03); }
+#vig { opacity: .55; }

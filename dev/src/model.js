@@ -52,7 +52,7 @@ function loft(secs, N = 18) {
   return geo;
 }
 const sec = (x, y, rT, rB, rz, z = 0) => ({ c: V(x, y, z), rT, rB, rz });
-const LEGK = 1.28; // 脚を太めに（かわいい体形）
+const LEGK = 1.42; // 脚を太めに（かわいい体形）
 function legLoft(rows) { return loft(rows.map(([y, f, b, w, x = 0]) => ({ c: V(x, y, 0), rT: f * LEGK, rB: b * LEGK, rz: w * LEGK })), 14); }
 
 const geoCache = {};
@@ -66,29 +66,29 @@ function horseGeos() {
     sec(-0.28, 1.33, 0.41, 0.36, 0.39), sec(-0.52, 1.36, 0.43, 0.38, 0.38), sec(-0.76, 1.35, 0.4, 0.38, 0.34),
     sec(-0.93, 1.31, 0.3, 0.3, 0.25), sec(-1.02, 1.28, 0.12, 0.14, 0.1),
   ], 24);
-  body.scale(0.95, 1.03, 1.1);
+  body.scale(0.94, 1.1, 1.22);
   // 首と頭（首の付け根が原点）
-  const alpha = 0.42, beta = -1.05;
+  const alpha = 0.5, beta = -0.82;
   const E = V(Math.cos(alpha) * 0.95, Math.sin(alpha) * 0.95, 0);
   const hd = (t) => E.clone().add(V(Math.cos(beta) * t, Math.sin(beta) * t, 0));
   const na = (t, rT, rB, rz) => ({ c: V(Math.cos(alpha) * t - 0.05, Math.sin(alpha) * t - 0.02, 0), rT, rB, rz });
-  const neckG = loft([na(-0.16, 0.3, 0.36, 0.25), na(0.05, 0.27, 0.31, 0.22), na(0.35, 0.21, 0.23, 0.165), na(0.65, 0.17, 0.18, 0.13), na(0.92, 0.15, 0.16, 0.115)], 20);
+  const neckG = loft([na(-0.16, 0.36, 0.42, 0.31), na(0.05, 0.33, 0.37, 0.27), na(0.35, 0.26, 0.28, 0.2), na(0.65, 0.2, 0.21, 0.155), na(0.92, 0.17, 0.18, 0.13)], 20);
   const hs = (t, rT, rB, rz) => ({ c: hd(t), rT, rB, rz });
   const headG = loft([hs(-0.08, 0.15, 0.16, 0.12), hs(0.08, 0.14, 0.21, 0.13), hs(0.22, 0.115, 0.13, 0.105), hs(0.4, 0.092, 0.095, 0.085), hs(0.55, 0.088, 0.09, 0.083), hs(0.63, 0.06, 0.06, 0.06)], 20);
   const neck = neckG;
-  const rel = (geo) => { geo.translate(-E.x, -E.y, -E.z); return geo; }; // 頭のグループ基準に
+  const rel = (geo) => { geo.translate(-E.x, -E.y, -E.z); geo.rotateZ(-beta); return geo; }; // 頭のグループ基準に（頭の向きをx軸に）
   const head = rel(headG.clone());
   // 頭の形：鼻先を少し丸く大きく、口元は少し濃い色
   const muzzle = rel(mergeGeometries([g(new THREE.SphereGeometry(0.105, 16, 12), hd(0.56), 0, V(1.05, 0.95, 0.9))].map(NI)));
   // まんまるの目（白目・黒目・光）
-  const eyeAt = (side) => hd(0.07).add(V(Math.cos(beta + Math.PI / 2) * 0.055, Math.sin(beta + Math.PI / 2) * 0.055, side * 0.118));
-  const eyeW = rel(mergeGeometries([1, -1].map(sd => NI(g(new THREE.SphereGeometry(0.058, 16, 12), eyeAt(sd), 0, V(0.95, 1.05, 0.55))))));
-  const eyeB = rel(mergeGeometries([1, -1].map(sd => NI(g(new THREE.SphereGeometry(0.036, 12, 10), eyeAt(sd).add(V(0.012, -0.004, sd * 0.024)), 0, V(1, 1.1, 0.6))))));
-  const eyeH = rel(mergeGeometries([1, -1].map(sd => NI(g(new THREE.SphereGeometry(0.011, 6, 5), eyeAt(sd).add(V(0.026, 0.02, sd * 0.04)))))));
+  const eyeAt = (side) => hd(0.1).add(V(Math.cos(beta + Math.PI / 2) * 0.07, Math.sin(beta + Math.PI / 2) * 0.07, side * 0.1));
+  const eyeW = rel(mergeGeometries([1, -1].map(sd => NI(g(new THREE.SphereGeometry(0.066, 16, 12), eyeAt(sd), 0, V(1, 1.1, 0.62))))));
+  const eyeB = rel(mergeGeometries([1, -1].map(sd => NI(g(new THREE.SphereGeometry(0.046, 12, 10), eyeAt(sd).add(V(0.02, -0.004, sd * 0.024)), 0, V(1, 1.15, 0.62))))));
+  const eyeH = rel(mergeGeometries([1, -1].map(sd => NI(g(new THREE.SphereGeometry(0.014, 6, 5), eyeAt(sd).add(V(0.04, 0.024, sd * 0.042)))))));
   // 覆面（メンコ）：頭の上半分を包む布と、目のまわりのカップ
   const hood = rel(mergeGeometries([
     NI(loft([hs(-0.12, 0.16, 0.175, 0.13), hs(0.06, 0.15, 0.22, 0.138), hs(0.22, 0.123, 0.14, 0.113), hs(0.34, 0.1, 0.105, 0.094)], 20)),
-    ...[1, -1].map(sd => NI(g(new THREE.TorusGeometry(0.062, 0.02, 8, 18), eyeAt(sd).add(V(0, 0, sd * 0.006)), 0, V(1, 1.05, 1)))),
+    ...[1, -1].map(sd => NI(g(new THREE.TorusGeometry(0.074, 0.022, 8, 18), eyeAt(sd).add(V(0, 0, sd * 0.004)), 0, V(1, 1.08, 1), 0, sd * 0.35))),
   ]));
   const ears = rel(mergeGeometries([
     g(new THREE.ConeGeometry(0.045, 0.17, 10), E.clone().add(V(-0.04, 0.17, 0.07)), -0.25, V(1, 1, 0.75), 0.18),
@@ -109,15 +109,24 @@ function horseGeos() {
   const maneG = new THREE.BufferGeometry();
   maneG.setAttribute('position', new THREE.Float32BufferAttribute(mp, 3)); maneG.setAttribute('uv', new THREE.Float32BufferAttribute(mu, 2)); maneG.setIndex(mi); maneG.computeVertexNormals();
   const forelock = g(new THREE.PlaneGeometry(0.14, 0.16), E.clone().add(V(0.02, 0.12, 0)), 0.5, null, 0, Math.PI / 2);
-  const mane = NI(maneG); const fore = rel(NI(forelock));
+  const tufts = [];
+  for (let i = 0; i < 9; i++) {
+    const t = 0.0 + i * 0.105;
+    const cx = Math.cos(alpha) * t - Math.sin(alpha) * (0.3 - t * 0.12) - 0.04, cy = Math.sin(alpha) * t + Math.cos(alpha) * (0.3 - t * 0.12);
+    const c = new THREE.ConeGeometry(0.075 - i * 0.003, 0.2, 7); c.rotateZ(0.9 - alpha * 0.3); c.scale(1, 1, 0.7); c.translate(cx - 0.02, cy + 0.03, 0.02 * ((i % 2) * 2 - 1));
+    tufts.push(NI(c));
+  }
+  const mane = mergeGeometries([NI(maneG), ...tufts]);
+  const ft = [-1, 0, 1].map(k => { const c = new THREE.ConeGeometry(0.05, 0.16, 7); c.rotateZ(-1.2 + k * 0.15); c.translate(E.x + 0.07, E.y + 0.11, k * 0.04); return NI(c); });
+  const fore = rel(mergeGeometries([NI(forelock), ...ft]));
   const eyes = rel(mergeGeometries([
     g(new THREE.SphereGeometry(0.024, 6, 5), hd(0.62).add(V(0.03, -0.02, 0.055))),  // 鼻の穴
     g(new THREE.SphereGeometry(0.024, 6, 5), hd(0.62).add(V(0.03, -0.02, -0.055))),
   ].map(NI)));
   const blaze = rel(g(new THREE.PlaneGeometry(0.075, 0.5), hd(0.3).add(V(0.075 * Math.sin(-beta), 0.07, 0)), beta - Math.PI / 2, null, 0, Math.PI / 2));
-  const bit = hd(0.5).sub(E);
+  const bit = hd(0.5).sub(E).applyAxisAngle(V(0, 0, 1), -beta);
   const ring = (t, r, sc) => { const tg = new THREE.TorusGeometry(r, 0.012, 6, 18); tg.rotateY(Math.PI / 2); tg.scale(1, sc, 1); tg.rotateZ(beta); const p = hd(t); tg.translate(p.x, p.y, p.z); return NI(tg); };
-  const bridle = rel(mergeGeometries([ring(0.42, 0.112, 1.05), ring(0.06, 0.168, 1.1),
+  const bridle = rel(mergeGeometries([ring(0.44, 0.1, 1.05), ring(-0.07, 0.128, 1.25),
     g(new THREE.TorusGeometry(0.13, 0.014, 6, 16, Math.PI), E.clone().add(V(0.0, 0.07, 0)), Math.PI / 2 - 0.2, V(1, 1, 1.05), 0, Math.PI / 2).toNonIndexed()]));
   // 脚：上・管・つなぎ（球節で曲がる）
   const upperF = legLoft([[0.04, 0.12, 0.11, 0.1], [-0.12, 0.11, 0.1, 0.085], [-0.3, 0.07, 0.072, 0.06], [-0.43, 0.052, 0.06, 0.05], [-0.48, 0.065, 0.07, 0.064], [-0.53, 0.05, 0.05, 0.048]]);
@@ -128,7 +137,8 @@ function horseGeos() {
   const lowerH = legLoft([[0.02, 0.05, 0.055, 0.045], [-0.18, 0.038, 0.054, 0.036], [-0.37, 0.04, 0.052, 0.04], [-0.44, 0.06, 0.07, 0.057], [-0.48, 0.042, 0.046, 0.042]]);
   const sock = g(new THREE.CylinderGeometry(0.06, 0.066, 0.2, 10), V(0, -0.33, 0));
   // しっぽ：付け根＋毛すじを貼った板を3枚交差させて、ふさふさに
-  const tailParts = [g(new THREE.CylinderGeometry(0.075, 0.055, 0.28, 8), V(0, -0.13, 0))];
+  const tailParts = [g(new THREE.CylinderGeometry(0.085, 0.07, 0.28, 10), V(0, -0.13, 0)),
+    NI(loft([{ c: V(0, -0.2, 0), rT: 0.08, rB: 0.08, rz: 0.08 }, { c: V(0, -0.5, 0), rT: 0.15, rB: 0.15, rz: 0.12 }, { c: V(0, -0.85, 0), rT: 0.13, rB: 0.13, rz: 0.1 }, { c: V(0, -1.05, 0), rT: 0.03, rB: 0.03, rz: 0.03 }], 12))];
   for (let i = 0; i < 3; i++) {
     const pl = new THREE.PlaneGeometry(0.26, 0.85, 1, 4);
     const a = pl.attributes.position; for (let k = 0; k < a.count; k++) { const y = a.getY(k); a.setX(k, a.getX(k) * (0.75 + (0.425 - y) * 0.5)); }
@@ -141,7 +151,7 @@ function horseGeos() {
     g(new THREE.BoxGeometry(0.16, 0.08, 0.36), V(0.32, 1.72, 0)),
     g(new THREE.TorusGeometry(0.4, 0.025, 6, 20, Math.PI), V(0.1, 1.3, 0), 0, null, 0, Math.PI / 2), // 腹帯
   ].map(NI));
-  geoCache.h = { body, neck, head, muzzle, eyeW, eyeB, eyeH, hood, fore, E, ears, mane, eyes, blaze, bridle, upperF, lowerF, pastF, hoof, upperH, lowerH, sock, tail, saddle, bit, alpha };
+  geoCache.h = { beta, body, neck, head, muzzle, eyeW, eyeB, eyeH, hood, fore, E, ears, mane, eyes, blaze, bridle, upperF, lowerF, pastF, hoof, upperH, lowerH, sock, tail, saddle, bit, alpha };
   return geoCache.h;
 }
 
@@ -164,7 +174,7 @@ function jockeyGeos() {
     g(new THREE.SphereGeometry(0.1, 12, 8), V(0.42, 0.47, -0.15)),
     g(new THREE.SphereGeometry(0.16, 14, 10), V(0.04, 0.4, 0), 0, V(1, 0.9, 1.15)), // 腰
   ].map(NI));
-  const HC = V(0.58, 0.57, 0), big = (geo) => { geo.translate(-HC.x, -HC.y, -HC.z); geo.scale(1.38, 1.38, 1.38); geo.translate(HC.x, HC.y + 0.04, HC.z); return geo; };
+  const HC = V(0.58, 0.57, 0), big = (geo) => { geo.translate(-HC.x, -HC.y, -HC.z); geo.scale(1.55, 1.55, 1.55); geo.translate(HC.x, HC.y + 0.07, HC.z); return geo; };
   const helmet0 = mergeGeometries([
     g(new THREE.SphereGeometry(0.128, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.58), V(0.57, 0.6, 0)),
     g(new THREE.CylinderGeometry(0.12, 0.13, 0.02, 16, 1, false, -Math.PI * 0.45, Math.PI * 0.9), V(0.6, 0.6, 0), 0, V(1.25, 1, 1)), // ひさし
@@ -253,7 +263,10 @@ export function buildHorse(coat, silkColor, num, opts = {}) {
   const neckP = new THREE.Group(); neckP.position.set(0.58, 1.42, 0); bodyG.add(neckP);
   const neck = new THREE.Mesh(G.neck, coatMat); neckP.add(neck);
   // 頭（少し大きめ・かわいい顔）
-  const headG = new THREE.Group(); headG.position.copy(G.E); headG.scale.setScalar(1.42); neckP.add(headG);
+  // 頭：短く・幅広く（頭の向きに沿って縮め、横と縦に広げる）
+  const headO = new THREE.Group(); headO.position.copy(G.E); headO.scale.setScalar(1.42); neckP.add(headO);
+  const headR = new THREE.Group(); headR.rotation.z = G.beta; headO.add(headR);
+  const headG = new THREE.Group(); headG.scale.set(0.8, 1.14, 1.16); headR.add(headG);
   headG.add(new THREE.Mesh(G.head, coatMat));
   const mz = new THREE.Color(coat.body).multiplyScalar(coat.name === '芦毛' ? 0.55 : 0.62);
   headG.add(new THREE.Mesh(G.muzzle, new THREE.MeshStandardMaterial({ color: mz, roughness: 0.4, map: COAT_MAP })));
@@ -307,7 +320,7 @@ export function buildHorse(coat, silkColor, num, opts = {}) {
   const bri = mat([0xf0efe8, 0xf2c200, 0xe02828, 0x1d4ed8, 0x5a3a20][Math.floor(Math.random() * 5)], { roughness: 0.45 });
   headG.add(new THREE.Mesh(G.bridle, bri));
   root.traverse(o => { if (o.isMesh) { o.castShadow = !!opts.shadow; } });
-  const H = { root, bodyG, neckP, mane, legs, tailP, jock, torso, helmet, face, pants, boots, arms, silk, gog, gloves, bit: G.bit.clone().multiplyScalar(1.42).add(G.E), headG, phase: 0, coatMat, coatBase: coatMat.color.clone() };
+  const H = { root, bodyG, neckP, mane, legs, tailP, jock, torso, helmet, face, pants, boots, arms, silk, gog, gloves, bit: G.bit.clone().multiply(V(0.8, 1.14, 1.16)).applyAxisAngle(V(0, 0, 1), G.beta).multiplyScalar(1.42).add(G.E), headG, phase: 0, coatMat, coatBase: coatMat.color.clone() };
   return H;
 }
 

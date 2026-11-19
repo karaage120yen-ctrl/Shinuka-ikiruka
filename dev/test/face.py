@@ -9,7 +9,7 @@ async def main():
         await pg.goto('http://localhost:8765/#fast'); await pg.evaluate("()=>localStorage.setItem('shinuka_ikiruka_v1', JSON.stringify({settings:{sound:false,view:'back'},horses:[],jockeys:[],gacha:[],carrots:0,nextId:1}))"); await pg.reload(); await pg.wait_for_timeout(500)
         await pg.evaluate("window.__race3d({place:'東京',weather:'晴',going:'良',surf:'芝',dist:1600})")
         await pg.add_style_tag(content='.hud-top,#minimap,.hud-small,.hud-bottom,.hud-call,.hud-msg,.side{display:none!important}')
-        await pg.evaluate("()=>{window.__view && window.__view.setView('front')}")
+        await pg.evaluate("()=>{window.__view && window.__view.setView('front'); window.__view.frontDist = 3.6}")
         for i,t in enumerate([300, 2500, 2500, 2500]):
             await pg.wait_for_timeout(t); await pg.screenshot(path=f'{OUT}/face{i}.png')
         print('errors', errs[:4]); await b.close()
