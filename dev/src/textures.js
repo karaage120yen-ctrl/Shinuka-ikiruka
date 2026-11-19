@@ -124,13 +124,15 @@ export function tuftTex() {
 }
 // たてがみの毛すじ（白黒。色はマテリアルで付ける）
 export function maneTex() {
-  const c = canvas(256, 64), x = c.getContext('2d');
-  for (let i = 0; i < 520; i++) {
-    const px = Math.random() * 256, l = 30 + Math.random() * 34, v = 150 + Math.random() * 105;
-    x.strokeStyle = `rgb(${v},${v},${v})`; x.lineWidth = 0.8 + Math.random() * 1.4;
-    x.beginPath(); x.moveTo(px, 64); x.quadraticCurveTo(px + (Math.random() - 0.5) * 6, 64 - l * 0.5, px + (Math.random() - 0.5) * 10, 64 - l); x.stroke();
+  // 毛の束：根元（上）から毛先（下）へ。毛先はまばらに細くなる
+  const W = 256, H = 256, c = canvas(W, H), x = c.getContext('2d');
+  x.lineCap = 'round';
+  for (let i = 0; i < 900; i++) {
+    const px = 8 + Math.random() * (W - 16), l = H * (0.55 + Math.random() * 0.45), v = 120 + Math.random() * 135, sway = (Math.random() - 0.5) * 18;
+    x.strokeStyle = `rgba(${v},${v},${v},${0.75 + Math.random() * 0.25})`; x.lineWidth = 0.8 + Math.random() * 1.6;
+    x.beginPath(); x.moveTo(px, 0); x.bezierCurveTo(px + sway * 0.3, l * 0.35, px + sway * 0.8, l * 0.7, px + sway, l); x.stroke();
   }
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.generateMipmaps = false; t.minFilter = THREE.LinearFilter; return t;
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t;
 }
 // 砂ぼこり
 export function puffTex() {
@@ -231,31 +233,44 @@ export function clothTex(num, color) {
 // 毛並み（つや）
 // 毛並み：体の向き（u方向）に流れる短い毛をたくさん描く。色はマテリアル側で付ける
 const FUR = {};
-export function coatTex() {
-  if (!FUR.c) {
+export function coatTex(dapple = false) {
+  const key = dapple ? 'd' : 'c';
+  if (!FUR[key]) {
     const S = 512, c = canvas(S, S), x = c.getContext('2d');
-    x.fillStyle = '#e9e9e9'; x.fillRect(0, 0, S, S);
-    // ゆるいムラ（毛の流れのかたまり）
-    for (let i = 0; i < 260; i++) { const v = 200 + Math.random() * 55; x.fillStyle = `rgba(${v},${v},${v},0.25)`; x.beginPath(); x.ellipse(Math.random() * S, Math.random() * S, 20 + Math.random() * 40, 6 + Math.random() * 12, (Math.random() - 0.5) * 0.4, 0, Math.PI * 2); x.fill(); }
-    // 毛（明るい毛と暗い毛）
+    // ごく細かい短い毛：明るさのムラは小さく、流れは横（u方向）にそろえる
+    x.fillStyle = '#ececec'; x.fillRect(0, 0, S, S);
+    for (let i = 0; i < 90; i++) { const v = 215 + Math.random() * 40; x.fillStyle = `rgba(${v},${v},${v},0.18)`; x.beginPath(); x.ellipse(Math.random() * S, Math.random() * S, 30 + Math.random() * 60, 10 + Math.random() * 18, (Math.random() - 0.5) * 0.3, 0, Math.PI * 2); x.fill(); }
+    if (dapple) {
+      // 連銭：少し濃い地の上に、ふんわり明るいまるい斑をならべる（すき間が網目に見える）
+      x.fillStyle = 'rgba(150,150,150,0.35)'; x.fillRect(0, 0, S, S);
+      for (let i = 0; i < 46; i++) {
+        const px = Math.random() * S, py = Math.random() * S, r = 30 + Math.random() * 22;
+        for (const [ox, oy] of [[0, 0], [S, 0], [-S, 0], [0, S], [0, -S], [S, S], [-S, -S], [S, -S], [-S, S]]) {
+          const g = x.createRadialGradient(px + ox, py + oy, 0, px + ox, py + oy, r);
+          g.addColorStop(0, 'rgba(255,255,255,0.55)'); g.addColorStop(0.6, 'rgba(255,255,255,0.4)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+          x.fillStyle = g; x.beginPath(); x.arc(px + ox, py + oy, r, 0, Math.PI * 2); x.fill();
+        }
+      }
+    }
     x.lineCap = 'round';
-    for (let i = 0; i < 52000; i++) {
-      const px = Math.random() * S, py = Math.random() * S, l = 5 + Math.random() * 11, a = (Math.random() - 0.5) * 0.35;
-      const v = Math.random() < 0.5 ? 255 : 150 + Math.random() * 40;
-      x.strokeStyle = `rgba(${v},${v},${v},${0.18 + Math.random() * 0.22})`; x.lineWidth = 0.6 + Math.random() * 0.9;
-      x.beginPath(); x.moveTo(px, py); x.quadraticCurveTo(px + l * 0.5, py + a * l * 0.5 + 0.6, px + l, py + a * l); x.stroke();
+    for (let i = 0; i < 70000; i++) {
+      const px = Math.random() * S, py = Math.random() * S, l = 3 + Math.random() * 6, a = (Math.random() - 0.5) * 0.25;
+      const v = Math.random() < 0.55 ? 255 : 175 + Math.random() * 40;
+      x.strokeStyle = `rgba(${v},${v},${v},${0.1 + Math.random() * 0.16})`; x.lineWidth = 0.5 + Math.random() * 0.6;
+      x.beginPath(); x.moveTo(px, py); x.lineTo(px + l, py + a * l); x.stroke();
     }
-    FUR.c = c;
-    // でこぼこ（毛の立体感）
-    const b = canvas(S, S), bx = b.getContext('2d'); bx.fillStyle = '#808080'; bx.fillRect(0, 0, S, S); bx.lineCap = 'round';
-    for (let i = 0; i < 40000; i++) {
-      const px = Math.random() * S, py = Math.random() * S, l = 4 + Math.random() * 9, v = Math.random() < 0.5 ? 200 : 60;
-      bx.strokeStyle = `rgba(${v},${v},${v},0.35)`; bx.lineWidth = 0.8; bx.beginPath(); bx.moveTo(px, py); bx.lineTo(px + l, py + (Math.random() - 0.5) * 2); bx.stroke();
+    FUR[key] = c;
+    if (!FUR.b) {
+      const b = canvas(S, S), bx = b.getContext('2d'); bx.fillStyle = '#808080'; bx.fillRect(0, 0, S, S); bx.lineCap = 'round';
+      for (let i = 0; i < 60000; i++) {
+        const px = Math.random() * S, py = Math.random() * S, l = 3 + Math.random() * 5, v = Math.random() < 0.5 ? 175 : 85;
+        bx.strokeStyle = `rgba(${v},${v},${v},0.3)`; bx.lineWidth = 0.7; bx.beginPath(); bx.moveTo(px, py); bx.lineTo(px + l, py + (Math.random() - 0.5) * 1.2); bx.stroke();
+      }
+      FUR.b = b;
     }
-    FUR.b = b;
   }
-  const t = tex(FUR.c, 5, 3); t.anisotropy = 4;
-  t.bump = new THREE.CanvasTexture(FUR.b); t.bump.wrapS = t.bump.wrapT = THREE.RepeatWrapping; t.bump.repeat.set(5, 3);
+  const t = tex(FUR[key], 5, 3); t.anisotropy = 8;
+  t.bump = new THREE.CanvasTexture(FUR.b); t.bump.wrapS = t.bump.wrapT = THREE.RepeatWrapping; t.bump.repeat.set(5, 3); t.bump.anisotropy = 8;
   return t;
 }
 // 黒いぼかし影
@@ -271,24 +286,23 @@ let EYE_T = null;
 export function eyeTex() {
   if (EYE_T) return EYE_T;
   const W = 512, H = 256, c = canvas(W, H), x = c.getContext('2d');
-  x.fillStyle = '#fbf8f1'; x.fillRect(0, 0, W, H);
-  // 白目のふちのかげ
-  const sg = x.createRadialGradient(W / 2, H / 2, 40, W / 2, H / 2, 150); sg.addColorStop(0, 'rgba(0,0,0,0)'); sg.addColorStop(1, 'rgba(90,70,60,0.35)');
-  x.fillStyle = sg; x.fillRect(0, 0, W, H);
-  const cx = W / 2, cy = H / 2, R = 78;
-  const ig = x.createRadialGradient(cx, cy + 6, 6, cx, cy, R);
-  ig.addColorStop(0, '#120a05'); ig.addColorStop(0.42, '#2a170c'); ig.addColorStop(0.78, '#4a2a14'); ig.addColorStop(0.93, '#2a170c'); ig.addColorStop(1, '#120904');
+  x.fillStyle = '#e9e2d6'; x.fillRect(0, 0, W, H);
+  const cx = W / 2, cy = H / 2, R = 104;
+  // 馬の目：ほとんどが濃い茶色の黒目。ひとみは横長
+  const ig = x.createRadialGradient(cx, cy + 10, 10, cx, cy, R);
+  ig.addColorStop(0, '#120a06'); ig.addColorStop(0.42, '#2e1a0e'); ig.addColorStop(0.74, '#5b3519'); ig.addColorStop(0.9, '#33200f'); ig.addColorStop(1, '#170d07');
   x.fillStyle = ig; x.beginPath(); x.arc(cx, cy, R, 0, Math.PI * 2); x.fill();
-  x.fillStyle = '#050302'; x.beginPath(); x.arc(cx, cy + 2, R * 0.46, 0, Math.PI * 2); x.fill();
-  // 光
-  x.fillStyle = '#ffffff'; x.beginPath(); x.ellipse(cx - 18, cy - 32, 20, 16, -0.3, 0, Math.PI * 2); x.fill();
-  x.beginPath(); x.arc(cx + 24, cy + 30, 8, 0, Math.PI * 2); x.fill();
+  x.fillStyle = '#060403'; x.beginPath(); x.ellipse(cx, cy + 4, R * 0.5, R * 0.24, 0, 0, Math.PI * 2); x.fill();
+  // やわらかい光（空の映りこみ）
+  const hg = x.createRadialGradient(cx - 20, cy - 36, 2, cx - 20, cy - 36, 30); hg.addColorStop(0, 'rgba(255,255,255,1)'); hg.addColorStop(0.55, 'rgba(255,255,255,0.85)'); hg.addColorStop(1, 'rgba(255,255,255,0)');
+  x.fillStyle = hg; x.beginPath(); x.ellipse(cx - 20, cy - 36, 30, 24, -0.3, 0, Math.PI * 2); x.fill();
+  x.fillStyle = 'rgba(255,255,255,0.75)'; x.beginPath(); x.arc(cx + 28, cy + 30, 8, 0, Math.PI * 2); x.fill();
   EYE_T = new THREE.CanvasTexture(c); EYE_T.colorSpace = THREE.SRGBColorSpace; EYE_T.anisotropy = 4;
   return EYE_T;
 }
 // 顔の色（鼻先のかげ・流星）。頭のロフトのuv：u=後ろ→鼻先、v=横→顔の正面(0.25)→反対の横→あご
 const HEADT = {};
-export function headTex(body, muzzle, blaze, umap) {
+export function headTex(body, muzzle, blaze, umap, eye) {
   const key = body + '_' + muzzle + '_' + blaze;
   if (HEADT[key]) return HEADT[key];
   const W = 256, H = 256, c = canvas(W, H), x = c.getContext('2d');
@@ -298,8 +312,9 @@ export function headTex(body, muzzle, blaze, umap) {
   const g = x.createLinearGradient(0, 0, W, 0);
   g.addColorStop(0, css(sb)); g.addColorStop(umap(0.55), css(sb)); g.addColorStop(umap(0.68), css(sm)); g.addColorStop(1, css(sm));
   x.fillStyle = g; x.fillRect(0, 0, W, H);
-  // あごの下は少し明るく、目のまわりは少し濃く
+  // 目のまわり（くぼみ）は少し濃く
   const vy = (v) => (1 - v) * H;
+  if (eye) for (const ev of [eye[1], eye[2]]) { const gx = eye[0] * W, gy = vy(ev); const gr = x.createRadialGradient(gx, gy, 2, gx, gy, 30); gr.addColorStop(0, 'rgba(40,20,10,0.35)'); gr.addColorStop(0.6, 'rgba(40,20,10,0.15)'); gr.addColorStop(1, 'rgba(40,20,10,0)'); x.fillStyle = gr; x.fillRect(gx - 32, gy - 32, 64, 64); }
   if (blaze) {
     x.fillStyle = '#f6f2ea';
     const pts = blaze === 1 ? [[0.08, 0.035], [0.13, 0.05], [0.19, 0.03], [0.22, 0.0]] : blaze === 2 ? [[0.06, 0.02], [0.1, 0.045], [0.3, 0.025], [0.5, 0.02], [0.62, 0.035], [0.68, 0.05], [0.7, 0.0]] : [[0.05, 0.025], [0.1, 0.06], [0.3, 0.045], [0.5, 0.04], [0.6, 0.06], [0.68, 0.075], [0.74, 0.07]];

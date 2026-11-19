@@ -20,7 +20,7 @@ export const COAT = [
   { name: '鹿毛', body: 0x93501f, mane: 0x241208, leg: 0x241208 },
   { name: '黒鹿毛', body: 0x5a3018, mane: 0x150a05, leg: 0x150a05 },
   { name: '青鹿毛', body: 0x2e1c14, mane: 0x0b0705, leg: 0x0b0705 },
-  { name: '栗毛', body: 0xcf7430, mane: 0xd88a42, leg: 0xb8642a },
+  { name: '栗毛', body: 0xbf6a2c, mane: 0xcf8a45, leg: 0xa65a24 },
   { name: '栃栗毛', body: 0xa85a26, mane: 0xe0b878, leg: 0x985022 },
   { name: '芦毛', body: 0xc4c2be, mane: 0x8a8886, leg: 0x6a6866 },
 ];

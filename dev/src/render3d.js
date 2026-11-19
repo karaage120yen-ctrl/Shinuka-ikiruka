@@ -620,8 +620,11 @@ export class RaceView {
       if (H.coatMat) {
         const tired = 1 - Math.max(0, Math.min(1, r.energy / r.cap / 0.6));
         const sw = Math.min(1, (this.race.t || 0) / 40) * 0.35 + tired * 0.65;
-        H.coatMat.roughness = 0.8 - sw * 0.32; if (H.coatMat.sheen != null) H.coatMat.sheen = 1 - sw * 0.5;
-        H.coatMat.color.copy(H.coatBase).multiplyScalar(1 - sw * 0.18);
+        for (const m of H.coatMats || [H.coatMat]) {
+          if (m._r0 == null) { m._r0 = m.roughness; m._s0 = m.sheen || 0; m._c0 = m.color.clone(); m._cc0 = m.clearcoat || 0; }
+          m.roughness = m._r0 - sw * 0.16; m.sheen = m._s0 * (1 - sw * 0.4); m.clearcoat = m._cc0 + sw * 0.35;
+          m.color.copy(m._c0).multiplyScalar(1 - sw * 0.16);
+        }
       }
     }
     // 砂ぼこり
@@ -653,12 +656,12 @@ export class RaceView {
       const push = r.v > 10 ? Math.sin(this.t * 2 * Math.PI * (r.v / (4.2 + r.v * 0.16)) ) * 0.05 : 0;
       for (const A of this.arms) {
         const shoulder = new THREE.Vector3(0.2, 2.25, A.s * 0.2);
-        let hand = new THREE.Vector3(0.92 + push, 1.72 + push * 0.4, A.s * 0.11);
+        let hand = new THREE.Vector3(0.86 + push, 2.2 + push * 0.4, A.s * 0.11);
         if (A.s > 0 && wa > 0) hand = new THREE.Vector3(0.5 - wa * 0.15, 1.95 + wa * 0.35, 0.36 + wa * 0.1);
         const bitWorld = P.bit.clone().add(new THREE.Vector3(0, 0, A.s * 0.1)).applyMatrix4(nk.matrix);
         stretch(A.arm, shoulder, hand);
         A.hand.position.copy(hand);
-        stretch(A.rein, (A.s > 0 && wa > 0) ? new THREE.Vector3(0.92, 1.72, 0.11) : hand, bitWorld);
+        stretch(A.rein, (A.s > 0 && wa > 0) ? new THREE.Vector3(0.86, 2.2, 0.11) : hand, bitWorld);
         if (A.s > 0) {
           // ムチ
           const tip = wa > 0 ? new THREE.Vector3(0.05 - wa * 0.6, 1.6 + wa * 0.2, 0.55) : new THREE.Vector3(1.3, 1.45, 0.28);
