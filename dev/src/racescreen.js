@@ -171,7 +171,7 @@ export function startRace(cfg) {
     const dt = Math.min(0.1, (now - last) / 1000); last = now;
     if (phase === 'replay') { replayFrame(dt); raf = requestAnimationFrame(loop); return; }
     if (phase === 'paddock' || phase === 'parade') { view.update(dt); view.render(); raf = requestAnimationFrame(loop); return; }
-    acc += dt * SPEED;
+    acc += window.__pause ? 0 : dt * SPEED;
     let steps = 0;
     input.steer = ((input.r ? 1 : 0) - (input.l ? 1 : 0)) * (TRACK.dir === -1 ? -1 : 1);
     while (acc >= 1 / 60 && steps < 6 * SPEED) {

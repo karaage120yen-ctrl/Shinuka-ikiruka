@@ -641,6 +641,14 @@ export class RaceView {
           camPos.set(p.x + Math.cos(a) * 6.5, (p.y || 0) + 3.2, p.z + Math.sin(a) * 6.5);
           target = new THREE.Vector3(p.x, (p.y || 0) - 0.6, p.z);
           this.camera.position.copy(camPos); this.camera.lookAt(target);
+        } else if (this.view === 'hero') {
+          // タイトル用：ゲートの正面・低い位置から、飛び出す馬たちを見上げる
+          const n = this.race.racers.length, mid = 0.5 + n * 1.25 / 2;
+          const q = trackPos(this.race.u0 + (this.heroDist || 9), mid + (this.heroSide || 2.5), {}), f = trackPos(this.race.u0 + 1, mid + (this.heroSide || 2.5) * 0.4, {});
+          camPos.set(q.x, (q.y || 0) + (this.heroH || 1.1), q.z);
+          target = new THREE.Vector3(f.x, (f.y || 0) + 1.9, f.z);
+          this.camera.position.copy(camPos); this.camera.lookAt(target);
+          if (Math.abs(this.camera.fov - (this.heroFov || 58)) > 0.1) { this.camera.fov = this.heroFov || 58; this.camera.updateProjectionMatrix(); }
         } else if (this.view === 'front') {
           const q = trackPos(r.u + (this.frontDist || 9), r.d + (this.frontDist || 9) * 0.17, {});
           camPos.set(q.x, (q.y || 0) + 2.1, q.z);
@@ -659,8 +667,8 @@ export class RaceView {
           camPos.set(p.x - p.hx * back + p.nx * 1.5, (p.y || 0) + 4.2, p.z - p.hz * back + p.nz * 1.5);
           target = new THREE.Vector3(p.x + p.hx * 8, (p.y || 0) + 1.4, p.z + p.hz * 8);
         }
-        if (this.view !== 'orbit' && this.view !== 'goal' && this.view !== 'front') { this.camera.position.lerp(camPos, 1 - Math.exp(-dt * 10)); this.camera.lookAt(target); }
-        const wf = this.view === 'goal' ? 22 : (this.camera.aspect < 1 ? 90 : 66) - (this.view === 'fp' ? 0 : 6);
+        if (this.view !== 'orbit' && this.view !== 'goal' && this.view !== 'front' && this.view !== 'hero') { this.camera.position.lerp(camPos, 1 - Math.exp(-dt * 10)); this.camera.lookAt(target); }
+        const wf = this.view === 'hero' ? (this.heroFov || 58) : this.view === 'goal' ? 22 : (this.camera.aspect < 1 ? 90 : 66) - (this.view === 'fp' ? 0 : 6);
         if (Math.abs(this.camera.fov - wf) > 0.1) { this.camera.fov = wf; this.camera.updateProjectionMatrix(); }
       }
       const pp = trackPos(r.u, r.d, {}); const p0y = pp.y;

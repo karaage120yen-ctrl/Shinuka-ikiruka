@@ -123,7 +123,8 @@ function horseGeos() {
     g(new THREE.SphereGeometry(0.024, 6, 5), hd(0.62).add(V(0.03, -0.02, 0.055))),  // 鼻の穴
     g(new THREE.SphereGeometry(0.024, 6, 5), hd(0.62).add(V(0.03, -0.02, -0.055))),
   ].map(NI)));
-  const blaze = rel(g(new THREE.PlaneGeometry(0.075, 0.5), hd(0.3).add(V(0.075 * Math.sin(-beta), 0.07, 0)), beta - Math.PI / 2, null, 0, Math.PI / 2));
+  // 流星（顔の前面＝頭のローカル+y側に沿って貼る）
+  const blaze = (() => { const pl = new THREE.PlaneGeometry(0.46, 0.08); pl.rotateX(-Math.PI / 2); const pa = pl.attributes.position; for (let i = 0; i < pa.count; i++) { const x = pa.getX(i); pa.setY(i, 0.124 - x * 0.12); pa.setZ(i, pa.getZ(i) * (1 - Math.abs(x) * 0.8)); } pl.translate(0.26, 0, 0); return pl; })();
   const bit = hd(0.5).sub(E).applyAxisAngle(V(0, 0, 1), -beta);
   const ring = (t, r, sc) => { const tg = new THREE.TorusGeometry(r, 0.012, 6, 18); tg.rotateY(Math.PI / 2); tg.scale(1, sc, 1); tg.rotateZ(beta); const p = hd(t); tg.translate(p.x, p.y, p.z); return NI(tg); };
   const bridle = rel(mergeGeometries([ring(0.44, 0.1, 1.05), ring(-0.07, 0.128, 1.25),

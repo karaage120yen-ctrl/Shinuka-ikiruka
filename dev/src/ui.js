@@ -65,13 +65,13 @@ export function home() {
     <div class="title-bg"></div>
     <div class="logo"><div class="logo-sub">競馬育成ゲーム</div><div class="logo-main">死ぬか<br>生きるかの<br>戦い</div></div>
     ${S.title ? `<div class="htitle">「${esc(S.title)}」</div>` : ''}
-    <div class="carrot home-carrot">🥕 金のにんじん ${S.carrots}</div>
-    ${missionHtml(esc)}
     <div class="menu">
+      <div class="carrot home-carrot">🥕 金のにんじん ${S.carrots}</div>
       <button class="mbtn big" data-act="horse">🐎 馬を育てる${ah && ah.p ? `<small>続き：${esc(ah.p.name)}（${ah.p.age}歳${ah.p.month}月）</small>` : '<small>生まれてから引退まで</small>'}</button>
       <button class="mbtn" data-act="jockey">🏇 騎手を育てる${aj && aj.p ? `<small>続き：${esc(aj.p.name)}（${aj.p.age}歳）</small>` : '<small>競馬学校から引退まで</small>'}</button>
       <button class="mbtn" data-act="bet">🎫 競馬で賭ける<small>コインで馬券を買う・ルームで友達と勝負　🪙 ${(S.bet ? S.bet.coins : 10000).toLocaleString('ja-JP')}</small></button>
       <button class="mbtn" data-act="owner">🏠 馬主モード<small>${S.owner ? `資金 ${Math.round(S.owner.money).toLocaleString('ja-JP')}万円・${S.owner.horses.length}頭` : 'セリで馬を買って、厩舎で走らせる'}</small></button>
+      ${missionHtml(esc)}
       <button class="mbtn" data-act="list">📖 一覧<small>育てた馬 ${S.horses.length}頭・騎手 ${S.jockeys.length}人</small></button>
       <button class="mbtn" data-act="ach">🏆 実績と称号<small>${Object.keys(S.ach || {}).length}/${ACH.length} 達成</small></button>
       <button class="mbtn" data-act="hall">🏛 殿堂<small>${(() => { const n = newHallCount(); return n ? `🆕 新しい殿堂入り ${n}` : '名馬・名騎手の記念館'; })()}</small></button>
